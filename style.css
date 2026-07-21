@@ -1,6 +1,5 @@
 /* ==========================================================================
-   CYOA AUDIO PLAYER - PRODUCTION STYLESHEET
-   Dark luxury audiobook theme with golden accents and full responsive layout.
+   CYOA AUDIO PLAYER STYLESHEET
    ========================================================================== */
 
 :root {
@@ -36,7 +35,7 @@
   --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Reset & Base Styles */
+/* Reset & Base */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -55,7 +54,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Utility Screen-Reader Class */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -107,7 +105,6 @@ body {
   font-family: var(--font-serif);
   font-size: 1.25rem;
   font-weight: 700;
-  letter-spacing: -0.01em;
 }
 
 .brand-title .highlight {
@@ -116,7 +113,6 @@ body {
   font-size: 0.85rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
   margin-left: 0.3rem;
 }
 
@@ -172,11 +168,6 @@ body {
   cursor: pointer;
 }
 
-.btn-icon-only:hover {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.1);
-}
-
 .btn-icon-only svg {
   width: 20px;
   height: 20px;
@@ -192,7 +183,7 @@ body {
   font-size: 1rem;
 }
 
-/* Layout Main Container */
+/* Main Layout */
 .main-layout {
   flex: 1;
   max-width: 900px;
@@ -281,7 +272,7 @@ body {
   border-radius: 50%;
 }
 
-/* Player Screen Layout */
+/* Player Screen */
 .player-screen {
   display: flex;
   flex-direction: column;
@@ -367,23 +358,16 @@ body {
   font-size: 0.9rem;
 }
 
-/* Visualizer & Media Card */
-.visualizer-card {
+/* Central Media & Decision Zone */
+.central-media-card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-}
-
-.visualizer-canvas {
-  width: 100%;
-  height: 90px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
+  gap: 1.25rem;
+  box-shadow: var(--shadow-main);
 }
 
 .scene-image-container {
@@ -398,6 +382,233 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Playing Banner & Audio Pulse Animation */
+.narration-banner {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.audio-pulse-indicator {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 20px;
+}
+
+.pulse-bar {
+  width: 4px;
+  background: var(--accent-gold);
+  border-radius: 2px;
+  animation: audioPulse 1.2s infinite ease-in-out alternate;
+}
+
+.pulse-bar:nth-child(1) { height: 12px; animation-delay: 0.1s; }
+.pulse-bar:nth-child(2) { height: 20px; animation-delay: 0.3s; }
+.pulse-bar:nth-child(3) { height: 15px; animation-delay: 0.2s; }
+.pulse-bar:nth-child(4) { height: 8px;  animation-delay: 0.4s; }
+
+@keyframes audioPulse {
+  0% { transform: scaleY(0.3); opacity: 0.5; }
+  100% { transform: scaleY(1); opacity: 1; }
+}
+
+#narration-status-text {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Decision Required Card (Inside Central Zone) */
+.choice-container {
+  background: rgba(245, 158, 11, 0.04);
+  border: 1px solid var(--border-active);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-glow);
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.choice-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.bell-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--accent-gold);
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+}
+
+.bell-icon {
+  width: 22px;
+  height: 22px;
+  animation: bellRing 1.2s ease-out;
+}
+
+@keyframes bellRing {
+  0% { transform: rotate(0); }
+  15% { transform: rotate(15deg); }
+  30% { transform: rotate(-15deg); }
+  45% { transform: rotate(10deg); }
+  60% { transform: rotate(-10deg); }
+  75% { transform: rotate(5deg); }
+  100% { transform: rotate(0); }
+}
+
+.choice-instruction {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+/* Timed Choice Countdown */
+.timer-bar-wrapper {
+  margin-bottom: 1.25rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.timer-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--accent-gold);
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.timer-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.timer-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-gold), #ef4444);
+  width: 100%;
+  transition: width 0.1s linear;
+}
+
+/* Choices List */
+.choices-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.btn-choice {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.125rem 1.5rem;
+  color: var(--text-primary);
+  font-size: 1rem;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  transition: all var(--transition-fast);
+}
+
+.btn-choice:hover, .btn-choice:focus-visible {
+  background: var(--bg-card-hover);
+  border-color: var(--accent-gold);
+  transform: translateX(4px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+  outline: none;
+}
+
+.choice-key-badge {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid var(--border-active);
+  color: var(--accent-gold);
+  font-size: 0.75rem;
+  font-weight: 700;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.choice-text {
+  flex: 1;
+  font-weight: 500;
+}
+
+/* Ending Screen */
+.ending-card {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.ending-card h3 {
+  font-family: var(--font-serif);
+  font-size: 1.75rem;
+  margin-bottom: 0.5rem;
+  color: var(--accent-gold);
+}
+
+.ending-card p {
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+}
+
+.ending-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+/* Autoplay Blocker Overlay Card */
+.autoplay-card {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid var(--border-active);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  text-align: center;
+}
+
+.autoplay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.autoplay-content svg {
+  width: 32px;
+  height: 32px;
+  color: var(--accent-gold);
 }
 
 /* Transcript Accordion */
@@ -499,11 +710,6 @@ body {
   background: var(--accent-gold);
   box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
   cursor: pointer;
-  transition: transform var(--transition-fast);
-}
-
-.audio-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.25);
 }
 
 .slider-fill {
@@ -518,7 +724,7 @@ body {
   z-index: 1;
 }
 
-/* Control Buttons Row */
+/* Controls Row */
 .controls-row {
   display: flex;
   align-items: center;
@@ -548,7 +754,6 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--transition-fast);
 }
 
 .btn-control-secondary:hover {
@@ -579,12 +784,11 @@ body {
   justify-content: center;
   cursor: pointer;
   box-shadow: 0 4px 20px rgba(245, 158, 11, 0.35);
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  transition: transform var(--transition-fast);
 }
 
 .btn-play-pause:hover {
   transform: scale(1.06);
-  box-shadow: 0 6px 25px rgba(245, 158, 11, 0.5);
 }
 
 .btn-play-pause svg {
@@ -596,7 +800,6 @@ body {
   margin-left: 3px;
 }
 
-/* Speed Selector Dropdown */
 .speed-select {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-subtle);
@@ -608,11 +811,6 @@ body {
   cursor: pointer;
 }
 
-.speed-select:hover {
-  color: var(--text-primary);
-}
-
-/* Volume Bar */
 .volume-container {
   display: flex;
   align-items: center;
@@ -628,10 +826,6 @@ body {
   cursor: pointer;
   display: flex;
   align-items: center;
-}
-
-.btn-mute:hover {
-  color: var(--text-primary);
 }
 
 .btn-mute svg {
@@ -659,195 +853,7 @@ body {
   cursor: pointer;
 }
 
-/* Choice & Decision Section */
-.choice-container {
-  background: var(--bg-card);
-  border: 1px solid var(--border-active);
-  border-radius: var(--radius-lg);
-  padding: 2rem;
-  box-shadow: var(--shadow-glow);
-  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(15px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.choice-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1.25rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.bell-indicator {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--accent-gold);
-  font-weight: 700;
-  font-size: 0.95rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.bell-icon {
-  width: 22px;
-  height: 22px;
-  animation: bellRing 1.2s ease-out;
-}
-
-@keyframes bellRing {
-  0% { transform: rotate(0); }
-  15% { transform: rotate(15deg); }
-  30% { transform: rotate(-15deg); }
-  45% { transform: rotate(10deg); }
-  60% { transform: rotate(-10deg); }
-  75% { transform: rotate(5deg); }
-  100% { transform: rotate(0); }
-}
-
-.choice-instruction {
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-}
-
-/* Timed Choice Countdown */
-.timer-bar-wrapper {
-  margin-bottom: 1.25rem;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(245, 158, 11, 0.2);
-}
-
-.timer-header {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.8rem;
-  color: var(--accent-gold);
-  font-weight: 600;
-  margin-bottom: 0.4rem;
-}
-
-.timer-track {
-  width: 100%;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-
-.timer-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--accent-gold), #ef4444);
-  width: 100%;
-  transition: width 0.1s linear;
-}
-
-/* Dynamic Choices List */
-.choices-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.875rem;
-}
-
-.btn-choice {
-  width: 100%;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 1.125rem 1.5rem;
-  color: var(--text-primary);
-  font-size: 1rem;
-  text-align: left;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  transition: all var(--transition-fast);
-  position: relative;
-  overflow: hidden;
-}
-
-.btn-choice:hover, .btn-choice:focus-visible {
-  background: var(--bg-card-hover);
-  border-color: var(--accent-gold);
-  transform: translateX(4px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-  outline: none;
-}
-
-.choice-key-badge {
-  background: rgba(245, 158, 11, 0.15);
-  border: 1px solid var(--border-active);
-  color: var(--accent-gold);
-  font-size: 0.75rem;
-  font-weight: 700;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.choice-text {
-  flex: 1;
-  font-weight: 500;
-}
-
-/* Ending Screen Panel */
-.ending-card {
-  text-align: center;
-  padding: 2rem 1rem;
-}
-
-.ending-card h3 {
-  font-family: var(--font-serif);
-  font-size: 1.75rem;
-  margin-bottom: 0.5rem;
-  color: var(--accent-gold);
-}
-
-.ending-card p {
-  color: var(--text-secondary);
-  margin-bottom: 1.5rem;
-}
-
-.ending-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-}
-
-/* Autoplay Blocker Overlay Card */
-.autoplay-card {
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid var(--border-active);
-  border-radius: var(--radius-md);
-  padding: 1.25rem;
-  text-align: center;
-}
-
-.autoplay-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.autoplay-content svg {
-  width: 32px;
-  height: 32px;
-  color: var(--accent-gold);
-}
-
-/* Drag and Drop Full Overlay */
+/* Drag and Drop Overlay */
 .drag-drop-overlay {
   position: fixed;
   inset: 0;
@@ -904,22 +910,12 @@ body {
   align-items: center;
 }
 
-.modal-header h2 {
-  font-size: 1.15rem;
-  font-weight: 600;
-}
-
 .btn-close-modal {
   background: none;
   border: none;
   color: var(--text-muted);
   font-size: 1.5rem;
   cursor: pointer;
-  line-height: 1;
-}
-
-.btn-close-modal:hover {
-  color: var(--text-primary);
 }
 
 .modal-body {
@@ -971,53 +967,22 @@ kbd {
   color: var(--text-primary);
   font-size: 0.875rem;
   box-shadow: var(--shadow-main);
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
   animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.toast-error {
-  border-color: #ef4444;
-  background: rgba(239, 68, 68, 0.15);
-}
-
-.toast-success {
-  border-color: #10b981;
-  background: rgba(16, 185, 129, 0.15);
-}
+.toast-error { border-color: #ef4444; background: rgba(239, 68, 68, 0.15); }
+.toast-success { border-color: #10b981; background: rgba(16, 185, 129, 0.15); }
 
 @keyframes toastIn {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Responsive Breakpoints */
 @media (max-width: 640px) {
-  .header-container {
-    padding: 0.85rem 1rem;
-  }
-  
-  .main-layout {
-    padding: 1rem;
-  }
-  
-  .hero-card {
-    padding: 2rem 1.25rem;
-  }
-  
-  .controls-row {
-    flex-wrap: wrap;
-    gap: 1rem;
-    justify-content: center;
-  }
-  
-  .secondary-controls-left, .secondary-controls-right {
-    justify-content: center;
-  }
-  
-  .volume-container {
-    width: 100%;
-    margin-top: 0.5rem;
-  }
+  .header-container { padding: 0.85rem 1rem; }
+  .main-layout { padding: 1rem; }
+  .hero-card { padding: 2rem 1.25rem; }
+  .controls-row { flex-wrap: wrap; gap: 1rem; justify-content: center; }
+  .secondary-controls-left, .secondary-controls-right { justify-content: center; }
+  .volume-container { width: 100%; margin-top: 0.5rem; }
 }
