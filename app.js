@@ -1,6 +1,6 @@
 /**
  * CYOA AUDIO STUDIO PLAYER
- * Safe, Client-Side Interactive Engine
+ * Client-Side Interactive Branching Engine with Customizable Timers & Offsets
  */
 
 'use strict';
@@ -17,7 +17,7 @@ class SoundEngine {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (AudioCtx) this.ctx = new AudioCtx();
       } catch (e) {
-        console.warn("Web Audio API not supported or blocked:", e);
+        console.warn("Web Audio API not supported:", e);
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
@@ -65,7 +65,7 @@ class SoundEngine {
         osc.stop(now + p.decay);
       });
     } catch (e) {
-      console.warn("Church bell chime failed:", e);
+      console.warn("Church bell failed:", e);
     }
   }
 
@@ -89,11 +89,11 @@ class SoundEngine {
   }
 }
 
-// 2. CYOA PARSER
+// 2. PARSER
 class CYOAParser {
   static async parsePackage(file) {
     if (typeof JSZip === 'undefined') {
-      throw new Error("JSZip library failed to load. Please check internet connection.");
+      throw new Error("JSZip library failed to load.");
     }
     let zip;
     try {
@@ -158,7 +158,7 @@ class CYOAParser {
   }
 }
 
-// 3. MAIN CYOA PLAYER APP
+// 3. MAIN PLAYER APP
 class CYOAPlayerApp {
   constructor() {
     this.soundEngine = new SoundEngine();
@@ -169,14 +169,14 @@ class CYOAPlayerApp {
     this.activeObjectUrls = [];
     this.bellDelayTimer = null;
     this.timedChoiceInterval = null;
+    this.choicesRevealed = false;
 
     try {
       this.initDOMReferences();
       this.initEventListeners();
-      console.log("CYOAPlayerApp initialized successfully.");
+      console.log("CYOAPlayerApp initialized.");
     } catch (err) {
       console.error("Initialization error:", err);
-      alert("Error initializing CYOA Player: " + err.message);
     }
   }
 
@@ -186,32 +186,26 @@ class CYOAPlayerApp {
       btnOpenFile: document.getElementById('btn-open-file'),
       btnDemoStory: document.getElementById('btn-demo-story'),
       btnShortcuts: document.getElementById('btn-shortcuts'),
-      
       welcomeScreen: document.getElementById('welcome-screen'),
       playerScreen: document.getElementById('player-screen'),
       btnHeroOpen: document.getElementById('btn-hero-open'),
       btnHeroDemo: document.getElementById('btn-hero-demo'),
-
       storyTitle: document.getElementById('story-title'),
       storyAuthor: document.getElementById('story-author'),
       storyDescription: document.getElementById('story-description'),
       statusTag: document.getElementById('story-status-tag'),
       sceneCounter: document.getElementById('scene-counter'),
-
       sceneImgContainer: document.getElementById('scene-image-container'),
       sceneImg: document.getElementById('scene-image'),
       narrationBanner: document.getElementById('narration-status-banner'),
-
       btnToggleTranscript: document.getElementById('btn-toggle-transcript'),
       transcriptBody: document.getElementById('transcript-body'),
       transcriptText: document.getElementById('transcript-text'),
-
       audio: document.getElementById('audio-element'),
       progressBar: document.getElementById('progress-bar'),
       progressFill: document.getElementById('progress-fill'),
       timeCurrent: document.getElementById('time-current'),
       timeDuration: document.getElementById('time-duration'),
-
       btnPlayPause: document.getElementById('btn-play-pause'),
       iconPlay: document.getElementById('icon-play'),
       iconPause: document.getElementById('icon-pause'),
@@ -219,25 +213,20 @@ class CYOAPlayerApp {
       btnSkipForward: document.getElementById('btn-skip-forward'),
       btnRestartScene: document.getElementById('btn-restart-scene'),
       selectSpeed: document.getElementById('select-speed'),
-
       btnMute: document.getElementById('btn-mute'),
       iconVolumeHigh: document.getElementById('icon-volume-high'),
       iconVolumeMuted: document.getElementById('icon-volume-muted'),
       volumeSlider: document.getElementById('volume-slider'),
-
       autoplayBlocker: document.getElementById('autoplay-blocker'),
       btnStartAutoplay: document.getElementById('btn-start-autoplay'),
-
       choiceContainer: document.getElementById('choice-container'),
       choicesList: document.getElementById('choices-list'),
       timerBarWrapper: document.getElementById('timer-bar-wrapper'),
       timerSecondsText: document.getElementById('timer-seconds-text'),
       timerProgressFill: document.getElementById('timer-progress-fill'),
-
       endingOptions: document.getElementById('ending-options'),
       btnRestartStory: document.getElementById('btn-restart-story'),
       btnLoadAnother: document.getElementById('btn-load-another'),
-
       dragDropOverlay: document.getElementById('drag-drop-overlay'),
       modalShortcuts: document.getElementById('modal-shortcuts'),
       btnCloseShortcuts: document.getElementById('btn-close-shortcuts'),
@@ -266,7 +255,7 @@ class CYOAPlayerApp {
     if (this.dom.btnHeroDemo) this.dom.btnHeroDemo.onclick = loadDemo;
 
     if (this.dom.audio) {
-      this.dom.audio.ontimeupdate = () => this.updateAudioProgress();
+      this.dom.audio.ontimeupdate = () => this.handleAudioTimeUpdate();
       this.dom.audio.onloadedmetadata = () => this.updateAudioProgress();
       this.dom.audio.onended = () => this.handleAudioEnded();
       this.dom.audio.onplay = () => {
@@ -345,6 +334,69 @@ class CYOAPlayerApp {
     window.onkeydown = (e) => this.handleGlobalKeyDown(e);
   }
 
+  getSceneSettings(scene) {
+    const defaults = (this.storyData && this.storyData.defaults) || {};
+    
+    // Resolve timer (number in seconds, 0 or null = no timer)
+    let timer = 0;
+    if (typeof scene.timer === 'number') {
+      timer = scene.timer;
+    } else if (typeof defaults.timer === 'number') {
+      timer = defaults.timer;
+    }
+
+    // Resolve choiceOffset / choiceDelay (seconds relative to audio end)
+    let choiceOffset = 1.5; // Default 1.5s after audio ends
+    if (typeof scene.choiceOffset === 'number') {
+      choiceOffset = scene.choiceOffset;
+    } else if (typeof scene.choiceDelay === 'number') {
+      choiceOffset = scene.choiceDelay;
+    } else if (typeof defaults.choiceOffset === 'number') {
+      choiceOffset = defaults.choiceOffset;
+    } else if (typeof defaults.choiceDelay === 'number') {
+      choiceOffset = defaults.choiceDelay;
+    }
+
+    return { timer, choiceOffset };
+  }
+
+  handleAudioTimeUpdate() {
+    this.updateAudioProgress();
+    if (!this.dom.audio || this.choicesRevealed) return;
+
+    const scene = this.storyData && this.storyData.scenes && this.storyData.scenes[this.currentSceneId];
+    if (!scene) return;
+
+    const { choiceOffset } = this.getSceneSettings(scene);
+    const dur = this.dom.audio.duration;
+    const cur = this.dom.audio.currentTime;
+
+    // Negative offset: Triggers choices BEFORE audio ends!
+    if (choiceOffset < 0 && dur > 0 && cur >= (dur + choiceOffset)) {
+      this.choicesRevealed = true;
+      this.soundEngine.playChurchBell();
+      this.revealChoices();
+    }
+  }
+
+  handleAudioEnded() {
+    if (this.choicesRevealed) return; // Already revealed by negative offset!
+
+    const scene = this.storyData && this.storyData.scenes && this.storyData.scenes[this.currentSceneId];
+    const { choiceOffset } = this.getSceneSettings(scene || {});
+
+    this.updateStatusTag('Waiting for Bell...', 'status-stopped');
+
+    const delayMs = Math.max(0, choiceOffset * 1000);
+    this.bellDelayTimer = setTimeout(() => {
+      if (!this.choicesRevealed) {
+        this.choicesRevealed = true;
+        this.soundEngine.playChurchBell();
+        this.revealChoices();
+      }
+    }, delayMs);
+  }
+
   async loadCyoaFile(file) {
     this.showToast("Loading " + file.name + "...", 'info');
     try {
@@ -373,6 +425,7 @@ class CYOAPlayerApp {
     }
 
     this.currentSceneId = sceneId;
+    this.choicesRevealed = false;
     this.state.visitedScenes.add(sceneId);
     this.state.history.push(sceneId);
 
@@ -419,21 +472,13 @@ class CYOAPlayerApp {
     }
   }
 
-  handleAudioEnded() {
-    this.updateStatusTag('Waiting for Bell...', 'status-stopped');
-    this.bellDelayTimer = setTimeout(() => {
-      this.soundEngine.playChurchBell();
-      this.revealChoices();
-    }, 1500);
-  }
-
   revealChoices() {
     this.updateStatusTag('Awaiting Decision', 'status-awaiting');
     if (this.dom.narrationBanner) this.dom.narrationBanner.classList.add('hidden');
     if (this.dom.choiceContainer) this.dom.choiceContainer.classList.remove('hidden');
 
     const scene = this.storyData.scenes[this.currentSceneId];
-    const choices = scene.choices || [];
+    const choices = (scene && scene.choices) || [];
 
     if (this.dom.choicesList) this.dom.choicesList.innerHTML = '';
     if (this.dom.endingOptions) this.dom.endingOptions.classList.add('hidden');
@@ -454,8 +499,9 @@ class CYOAPlayerApp {
       if (this.dom.choicesList) this.dom.choicesList.appendChild(btn);
     });
 
-    if (scene.timer && typeof scene.timer === 'number' && scene.timer > 0) {
-      this.startTimedChoiceCountdown(scene.timer, scene.timeoutNext || (choices[0] && choices[0].next));
+    const { timer } = this.getSceneSettings(scene);
+    if (timer > 0) {
+      this.startTimedChoiceCountdown(timer, scene.timeoutNext || (choices[0] && choices[0].next));
     } else {
       if (this.dom.timerBarWrapper) this.dom.timerBarWrapper.classList.add('hidden');
     }
@@ -493,6 +539,7 @@ class CYOAPlayerApp {
 
   selectChoice(choice) {
     this.clearTimers();
+    if (this.dom.audio) this.dom.audio.pause();
     if (choice.next) {
       this.loadScene(choice.next);
     } else {
@@ -641,7 +688,7 @@ class CYOAPlayerApp {
     this.showToast('Generating demo story package...', 'info');
     try {
       if (typeof JSZip === 'undefined') {
-        alert("JSZip is not loaded. Please check your internet connection.");
+        alert("JSZip is not loaded.");
         return;
       }
       const zip = new JSZip();
@@ -649,33 +696,38 @@ class CYOAPlayerApp {
       const sampleStoryJson = {
         title: "The Whispering Cavern",
         author: "A. Storyteller",
-        description: "An interactive audio mystery inside an ancient cavern. Choose your path wisely.",
+        description: "An interactive audio story showcasing custom timers and choice offsets.",
         start: "scene001",
+        defaults: {
+          choiceOffset: 1.0
+        },
         scenes: {
           scene001: {
             title: "The Cavern Entrance",
             audio: "audio/scene001.wav",
-            transcript: "You stand before the arching entrance of the ancient cavern. Cold damp air drifts out from the darkness ahead. Two paths lie before you.",
+            transcript: "You stand before the arching entrance of the ancient cavern.",
+            choiceOffset: 0.5,
             choices: [
               { text: "Light a torch and step inside", next: "scene002" },
-              { text: "Follow the narrow ledge around the mountain", next: "scene003" }
+              { text: "Follow the narrow ledge", next: "scene003" }
             ]
           },
           scene002: {
-            title: "Into the Deep",
+            title: "Into the Deep (Timed Choice!)",
             audio: "audio/scene002.wav",
-            transcript: "The torchlight flickers off damp stone walls. Up ahead, you hear distant rushing water. You have 10 seconds to make a quick decision!",
-            timer: 10,
+            transcript: "Up ahead, you hear rushing water. You have 8 seconds to make a choice!",
+            timer: 8,
+            choiceOffset: -1.5, // Chime bell 1.5s BEFORE audio finishes!
             timeoutNext: "scene003",
             choices: [
-              { text: "Follow the sound of echoing water", next: "scene003" },
-              { text: "Investigate the strange warm draft to the left", next: "scene003" }
+              { text: "Follow the echoing water", next: "scene003" },
+              { text: "Investigate warm draft", next: "scene003" }
             ]
           },
           scene003: {
             title: "The Bioluminescent Chamber",
             audio: "audio/scene003.wav",
-            transcript: "You emerge into a majestic underground cavern glowing with tranquil blue light. You have safely navigated the mystery!",
+            transcript: "You emerge into a glowing cavern. You have completed the story!",
             choices: []
           }
         }
@@ -685,7 +737,7 @@ class CYOAPlayerApp {
 
       const audioFolder = zip.folder("audio");
       audioFolder.file("scene001.wav", this.createToneWavBlob(3.5, 440));
-      audioFolder.file("scene002.wav", this.createToneWavBlob(3.0, 523.25));
+      audioFolder.file("scene002.wav", this.createToneWavBlob(3.5, 523.25));
       audioFolder.file("scene003.wav", this.createToneWavBlob(4.0, 659.25));
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
@@ -694,7 +746,7 @@ class CYOAPlayerApp {
       await this.loadCyoaFile(demoFile);
     } catch (err) {
       console.error(err);
-      this.showToast("Failed to generate demo story: " + err.message, "error");
+      this.showToast("Failed to generate demo story.", "error");
     }
   }
 
