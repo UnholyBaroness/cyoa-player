@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CYOA Player - Interactive Audio Experience</title>
+  <meta name="description" content="A client-side interactive audio story player for .cyoa packages." />
+  
+  <!-- Google Fonts for Audiobook & Editorial Styling -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap" rel="stylesheet">
+  
+  <!-- JSZip Library for client-side ZIP extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="app-header" role="banner">
+    <div class="header-container">
+      <div class="brand">
+        <svg class="brand-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="22"></line>
+        </svg>
+        <span class="brand-title">CYOA <span class="highlight">Audio Studio</span></span>
+      </div>
+
+      <div class="header-actions">
+        <!-- Hidden file input for picking .cyoa files -->
+        <input type="file" id="file-input" accept=".cyoa,.zip" class="sr-only" aria-label="Select CYOA file" />
+        
+        <button id="btn-open-file" class="btn btn-primary">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          Open .cyoa File
+        </button>
+
+        <button id="btn-demo-story" class="btn btn-secondary" title="Load sample story to test player">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          Demo Story
+        </button>
+
+        <button id="btn-shortcuts" class="btn btn-icon-only" aria-label="Keyboard Shortcuts" title="Keyboard Shortcuts (?)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+            <line x1="6" y1="8" x2="6.01" y2="8"></line>
+            <line x1="10" y1="8" x2="10.01" y2="8"></line>
+            <line x1="14" y1="8" x2="14.01" y2="8"></line>
+            <line x1="18" y1="8" x2="18.01" y2="8"></line>
+            <line x1="8" y1="12" x2="16" y2="12"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Drag and Drop Overlay -->
+  <div id="drag-drop-overlay" class="drag-drop-overlay hidden" aria-hidden="true">
+    <div class="drag-drop-content">
+      <svg class="drag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="17 8 12 3 7 8"></polyline>
+        <line x1="12" y1="3" x2="12" y2="15"></line>
+      </svg>
+      <h2>Drop .cyoa Story File Here</h2>
+      <p>Local in-browser playback • No uploads</p>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <main id="app-main" class="main-layout">
+
+    <!-- Screen 1: Welcome & File Selection Hero -->
+    <section id="welcome-screen" class="welcome-screen" aria-labelledby="welcome-heading">
+      <div class="hero-card">
+        <div class="hero-icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 3v18M3 12h18M5.5 5.5l13 13M18.5 5.5l-13 13"/>
+          </svg>
+        </div>
+        <h1 id="welcome-heading">Interactive Audio Player</h1>
+        <p class="hero-subtitle">Load branching audio experiences (.cyoa) directly in your browser. Private, offline-capable, and completely client-side.</p>
+        
+        <div class="hero-actions">
+          <button id="btn-hero-open" class="btn btn-primary btn-large">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            Select .cyoa File
+          </button>
+          <button id="btn-hero-demo" class="btn btn-secondary btn-large">
+            Play Built-in Demo
+          </button>
+        </div>
+
+        <div class="feature-badges">
+          <span class="badge"><span class="dot"></span> 100% Private Local Playback</span>
+          <span class="badge"><span class="dot"></span> Smart Decision Bell Signaling</span>
+          <span class="badge"><span class="dot"></span> Timed & Branching Choices</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screen 2: Active Story Audio Player Screen -->
+    <section id="player-screen" class="player-screen hidden" aria-label="Audio Story Player">
+      
+      <!-- Story Metadata Header -->
+      <div class="story-meta-card">
+        <div class="meta-top">
+          <span id="story-status-tag" class="status-badge status-stopped">Ready</span>
+          <span id="scene-counter" class="scene-counter-tag">Scene 1</span>
+        </div>
+
+        <h1 id="story-title" class="story-title">Story Title</h1>
+        <p id="story-author" class="story-author">by Author Name</p>
+        <p id="story-description" class="story-description">Description of the loaded audio experience...</p>
+      </div>
+
+      <!-- Audio Display & Visualizer Box -->
+      <div class="visualizer-card">
+        <canvas id="audio-visualizer" class="visualizer-canvas" width="600" height="120" aria-hidden="true"></canvas>
+
+        <!-- Dynamic Cover Artwork / Placeholder -->
+        <div id="scene-image-container" class="scene-image-container hidden">
+          <img id="scene-image" src="" alt="Scene Artwork" />
+        </div>
+
+        <!-- Optional Transcript Accordion -->
+        <div class="transcript-section">
+          <button id="btn-toggle-transcript" class="btn-transcript-toggle" aria-expanded="false" aria-controls="transcript-body">
+            <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+            <span>Audio Transcript / Narration Text</span>
+          </button>
+          <div id="transcript-body" class="transcript-body hidden" aria-live="polite">
+            <p id="transcript-text">No transcript provided for this scene.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Audio Player Controls -->
+      <div class="player-controls-card">
+        
+        <!-- Progress Scrubbing Bar -->
+        <div class="progress-container">
+          <span id="time-current" class="time-label">00:00</span>
+          <div class="slider-wrapper">
+            <input type="range" id="progress-bar" class="audio-slider" min="0" max="100" value="0" step="0.1" aria-label="Audio playback progress" />
+            <div id="progress-fill" class="slider-fill"></div>
+          </div>
+          <span id="time-duration" class="time-label">00:00</span>
+        </div>
+
+        <!-- Central Player Buttons -->
+        <div class="controls-row">
+          
+          <div class="secondary-controls-left">
+            <button id="btn-restart-scene" class="btn-control-secondary" aria-label="Restart Scene" title="Restart Scene (R)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 4v6h6"></path>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+              </svg>
+            </button>
+            <button id="btn-skip-back" class="btn-control-secondary" aria-label="Rewind 10 seconds" title="Rewind 10s (Left Arrow)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 19l-9-7 9-7v14zM22 19l-9-7 9-7v14z"></path>
+              </svg>
+              <span class="control-subtext">-10s</span>
+            </button>
+          </div>
+
+          <!-- Play / Pause Main Trigger -->
+          <button id="btn-play-pause" class="btn-play-pause" aria-label="Play or Pause audio" title="Play/Pause (Space / K)">
+            <svg id="icon-play" class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <svg id="icon-pause" class="pause-icon hidden" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+          </button>
+
+          <div class="secondary-controls-right">
+            <button id="btn-skip-forward" class="btn-control-secondary" aria-label="Forward 10 seconds" title="Forward 10s (Right Arrow)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 19l9-7-9-7v14zM2 19l9-7-9-7v14z"></path>
+              </svg>
+              <span class="control-subtext">+10s</span>
+            </button>
+
+            <!-- Playback Speed Dropdown -->
+            <div class="speed-selector-wrapper">
+              <select id="select-speed" class="speed-select" aria-label="Playback Speed" title="Playback Speed">
+                <option value="0.75">0.75x</option>
+                <option value="1.0" selected>1.0x</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2.0">2.0x</option>
+              </select>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Volume Bar Control -->
+        <div class="volume-container">
+          <button id="btn-mute" class="btn-mute" aria-label="Mute / Unmute" title="Mute/Unmute (M)">
+            <svg id="icon-volume-high" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+            <svg id="icon-volume-muted" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="1" y1="1" x2="23" y2="23"></line>
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            </svg>
+          </button>
+          <input type="range" id="volume-slider" class="volume-slider" min="0" max="1" step="0.05" value="1" aria-label="Volume level" />
+        </div>
+
+      </div>
+
+      <!-- User Interaction Required Banner (Autoplay Block Fallback) -->
+      <div id="autoplay-blocker" class="autoplay-card hidden">
+        <div class="autoplay-content">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polygon points="10 8 16 12 10 16 10 8"></polygon>
+          </svg>
+          <p>Audio ready. Click below to begin scene audio.</p>
+          <button id="btn-start-autoplay" class="btn btn-primary">Start Scene Audio</button>
+        </div>
+      </div>
+
+      <!-- Decision & Choices Section -->
+      <div id="choice-container" class="choice-container hidden" aria-live="polite">
+        
+        <div class="choice-header">
+          <div class="bell-indicator">
+            <svg class="bell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            <span>Decision Required</span>
+          </div>
+          <span id="choice-instruction" class="choice-instruction">Select your path to continue:</span>
+        </div>
+
+        <!-- Timed Choice Countdown Timer Bar -->
+        <div id="timer-bar-wrapper" class="timer-bar-wrapper hidden">
+          <div class="timer-header">
+            <span class="timer-label">Time Remaining to Decide:</span>
+            <span id="timer-seconds-text" class="timer-seconds">10s</span>
+          </div>
+          <div class="timer-track">
+            <div id="timer-progress-fill" class="timer-progress-fill"></div>
+          </div>
+        </div>
+
+        <!-- Dynamic Choice Buttons List -->
+        <div id="choices-list" class="choices-list" role="group" aria-label="Story Choices">
+          <!-- Choice buttons generated dynamically by JS -->
+        </div>
+
+        <!-- Ending Screen Options (When choices array is empty) -->
+        <div id="ending-options" class="ending-options hidden">
+          <div class="ending-card">
+            <h3>The End</h3>
+            <p>You have reached the conclusion of this story path.</p>
+            <div class="ending-actions">
+              <button id="btn-restart-story" class="btn btn-primary">
+                Restart Story
+              </button>
+              <button id="btn-load-another" class="btn btn-secondary">
+                Load Another Story
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Keyboard Shortcuts Reference Modal -->
+  <div id="modal-shortcuts" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="shortcuts-modal-title">Keyboard Shortcuts</h2>
+        <button id="btn-close-shortcuts" class="btn-close-modal" aria-label="Close shortcuts modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <ul class="shortcuts-list">
+          <li><kbd>Space</kbd> or <kbd>K</kbd> <span>Play / Pause Audio</span></li>
+          <li><kbd>←</kbd> or <kbd>J</kbd> <span>Rewind 10 Seconds</span></li>
+          <li><kbd>→</kbd> or <kbd>L</kbd> <span>Forward 10 Seconds</span></li>
+          <li><kbd>1</kbd> – <kbd>5</kbd> <span>Select Choice 1 to 5</span></li>
+          <li><kbd>M</kbd> <span>Mute / Unmute Volume</span></li>
+          <li><kbd>R</kbd> <span>Restart Current Scene</span></li>
+          <li><kbd>T</kbd> <span>Toggle Text Transcript</span></li>
+          <li><kbd>?</kbd> <span>Open / Close Shortcuts Help</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification System -->
+  <div id="toast-container" class="toast-container" aria-live="assertive"></div>
+
+  <!-- HTML5 Hidden Audio Element -->
+  <audio id="audio-element" class="sr-only" preload="auto"></audio>
+
+  <!-- Application Script -->
+  <script src="app.js"></script>
+</body>
+</html>
