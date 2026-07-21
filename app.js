@@ -5,7 +5,7 @@
 
 'use strict';
 
-// 1. SOUND ENGINE
+// 1. SOUND ENGINE (Web Audio Church Bell & Click SFX)
 class SoundEngine {
   constructor() {
     this.ctx = null;
@@ -89,7 +89,7 @@ class SoundEngine {
   }
 }
 
-// 2. PARSER
+// 2. CYOA PARSER
 class CYOAParser {
   static async parsePackage(file) {
     if (typeof JSZip === 'undefined') {
@@ -158,87 +158,7 @@ class CYOAParser {
   }
 }
 
-// 3. VISUALIZER
-class AudioVisualizer {
-  constructor(canvasElement, audioElement, soundEngine) {
-    this.canvas = canvasElement;
-    this.ctx = canvasElement ? canvasElement.getContext('2d') : null;
-    this.audio = audioElement;
-    this.soundEngine = soundEngine;
-    this.analyser = null;
-    this.source = null;
-    this.animationFrame = null;
-  }
-
-  setup() {
-    if (this.analyser || !this.audio || !this.ctx) return;
-    try {
-      this.soundEngine.init();
-      if (!this.soundEngine.ctx) return;
-      const audioCtx = this.soundEngine.ctx;
-      this.analyser = audioCtx.createAnalyser();
-      this.analyser.fftSize = 64;
-      this.source = audioCtx.createMediaElementSource(this.audio);
-      this.source.connect(this.analyser);
-      this.analyser.connect(audioCtx.destination);
-    } catch (e) {
-      console.warn("Visualizer setup notice:", e);
-    }
-  }
-
-  start() {
-    this.setup();
-    this.draw();
-  }
-
-  stop() {
-    if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
-    this.drawIdleState();
-  }
-
-  draw() {
-    if (!this.ctx || !this.canvas) return;
-    this.animationFrame = requestAnimationFrame(() => this.draw());
-    if (!this.analyser) {
-      this.drawIdleState();
-      return;
-    }
-    const bufferLength = this.analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    this.analyser.getByteFrequencyData(dataArray);
-
-    const width = this.canvas.width;
-    const height = this.canvas.height;
-    this.ctx.clearRect(0, 0, width, height);
-
-    const barWidth = (width / bufferLength) * 1.5;
-    let x = 0;
-    for (let i = 0; i < bufferLength; i++) {
-      const barHeight = (dataArray[i] / 255) * height * 0.8;
-      const gradient = this.ctx.createLinearGradient(0, height, 0, 0);
-      gradient.addColorStop(0, '#d97706');
-      gradient.addColorStop(1, '#f59e0b');
-      this.ctx.fillStyle = gradient;
-      this.ctx.fillRect(x, height - barHeight, barWidth - 2, barHeight);
-      x += barWidth + 1;
-    }
-  }
-
-  drawIdleState() {
-    if (!this.ctx || !this.canvas) return;
-    const width = this.canvas.width;
-    const height = this.canvas.height;
-    this.ctx.clearRect(0, 0, width, height);
-    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    this.ctx.lineWidth = 2;
-    this.ctx.beginPath();
-    this.ctx.moveTo(0, height / 2);
-    this.ctx.lineTo(width, height / 2);
-    this.ctx.stroke();
-  }
-}
-
-// 4. MAIN APP
+// 3. MAIN CYOA PLAYER APP
 class CYOAPlayerApp {
   constructor() {
     this.soundEngine = new SoundEngine();
@@ -253,7 +173,6 @@ class CYOAPlayerApp {
     try {
       this.initDOMReferences();
       this.initEventListeners();
-      this.visualizer = new AudioVisualizer(this.dom.canvas, this.dom.audio, this.soundEngine);
       console.log("CYOAPlayerApp initialized successfully.");
     } catch (err) {
       console.error("Initialization error:", err);
@@ -279,9 +198,9 @@ class CYOAPlayerApp {
       statusTag: document.getElementById('story-status-tag'),
       sceneCounter: document.getElementById('scene-counter'),
 
-      canvas: document.getElementById('audio-visualizer'),
       sceneImgContainer: document.getElementById('scene-image-container'),
       sceneImg: document.getElementById('scene-image'),
+      narrationBanner: document.getElementById('narration-status-banner'),
 
       btnToggleTranscript: document.getElementById('btn-toggle-transcript'),
       transcriptBody: document.getElementById('transcript-body'),
@@ -354,7 +273,6 @@ class CYOAPlayerApp {
         this.updateStatusTag('Playing', 'status-playing');
         if (this.dom.iconPlay) this.dom.iconPlay.classList.add('hidden');
         if (this.dom.iconPause) this.dom.iconPause.classList.remove('hidden');
-        this.visualizer.start();
       };
       this.dom.audio.onpause = () => {
         if (!this.dom.audio.ended) {
@@ -362,7 +280,6 @@ class CYOAPlayerApp {
         }
         if (this.dom.iconPlay) this.dom.iconPlay.classList.remove('hidden');
         if (this.dom.iconPause) this.dom.iconPause.classList.add('hidden');
-        this.visualizer.stop();
       };
     }
 
@@ -461,6 +378,7 @@ class CYOAPlayerApp {
 
     this.clearTimers();
     if (this.dom.choiceContainer) this.dom.choiceContainer.classList.add('hidden');
+    if (this.dom.narrationBanner) this.dom.narrationBanner.classList.remove('hidden');
     if (this.dom.autoplayBlocker) this.dom.autoplayBlocker.classList.add('hidden');
 
     if (this.dom.sceneCounter) this.dom.sceneCounter.textContent = "Scene: " + (scene.title || sceneId);
@@ -511,6 +429,7 @@ class CYOAPlayerApp {
 
   revealChoices() {
     this.updateStatusTag('Awaiting Decision', 'status-awaiting');
+    if (this.dom.narrationBanner) this.dom.narrationBanner.classList.add('hidden');
     if (this.dom.choiceContainer) this.dom.choiceContainer.classList.remove('hidden');
 
     const scene = this.storyData.scenes[this.currentSceneId];
@@ -817,7 +736,6 @@ class CYOAPlayerApp {
   }
 }
 
-// Global Instant Launcher
 function initApp() {
   if (!window.cyoaPlayer) {
     window.cyoaPlayer = new CYOAPlayerApp();
