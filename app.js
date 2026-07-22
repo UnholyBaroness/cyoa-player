@@ -211,8 +211,8 @@ class CYOACreator {
       }
     });
   }
-
-  renderUI() {
+  
+renderUI() {
     const container = document.getElementById('creator-scenes-container');
     if (!container) return;
 
@@ -222,11 +222,6 @@ class CYOACreator {
     this.scenes.forEach((scene, index) => {
       const card = document.createElement('div');
       card.className = 'scene-edit-card';
-
-      // Options for dropdowns showing Scene Titles
-      const sceneDropdownOptions = this.scenes.map((s, sIdx) => 
-        `<option value="${s.id}">Scene ${sIdx + 1}: ${s.title || 'Untitled'}</option>`
-      ).join('');
 
       card.innerHTML = `
         <div class="scene-edit-header">
@@ -243,40 +238,43 @@ class CYOACreator {
             <input type="file" accept="audio/*" class="form-input scene-audio-input" data-index="${index}" />
             <span class="badge" style="margin-top:4px;">${scene.audioFile ? 'File attached: ' + scene.audioFile.name : 'No audio attached'}</span>
           </div>
-          <div class="form-group full-width">
-            <label>Transcript / Narration Text:</label>
-            <textarea class="form-input form-textarea scene-transcript-input" rows="2" data-index="${index}">${scene.transcript}</textarea>
-          </div>
-          <div class="form-group">
-            <label>Timer (Seconds, 0 = unlimited):</label>
-            <input type="number" min="0" class="form-input scene-timer-input" value="${scene.timer}" data-index="${index}" />
-          </div>
-          <div class="form-group">
-            <label>On Timeout Jump To Scene:</label>
-            <select class="form-input scene-timeout-select" data-index="${index}">
-              <option value="">Default (First choice or next scene)</option>
-              ${this.scenes.map((s, sIdx) => 
-                `<option value="${s.id}" ${scene.timeoutNext === s.id ? 'selected' : ''}>Scene ${sIdx + 1}: ${s.title || 'Untitled'}</option>`
-              ).join('')}
-            </select>
-          </div>
-          <div class="form-group full-width">
-            <label>Choice Bell Offset (Seconds relative to audio end):</label>
-            <input type="number" step="0.5" class="form-input scene-offset-input" value="${scene.choiceOffset}" data-index="${index}" />
-          </div>
         </div>
+
         <div class="choices-editor">
           <div class="section-header">
-            <label><strong>Choices (${scene.choices.length}):</strong></label>
+            <label><strong>Choices & Timing Settings (${scene.choices.length}):</strong></label>
             <button class="btn btn-secondary btn-sm btn-add-choice" data-index="${index}">+ Add Choice</button>
           </div>
+
+          <!-- Timer & Bell Settings inside the Choices box -->
+          <div class="form-grid" style="margin-bottom: 1rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 1rem;">
+            <div class="form-group">
+              <label>Timer (Seconds, 0 = unlimited):</label>
+              <input type="number" min="0" class="form-input scene-timer-input" value="${scene.timer}" data-index="${index}" />
+            </div>
+            <div class="form-group">
+              <label>On Timeout Jump To Scene:</label>
+              <select class="form-input scene-timeout-select" data-index="${index}">
+                <option value="">Default (First choice or next scene)</option>
+                ${this.scenes.map((s, sIdx) => 
+                  `<option value="${s.id}" ${scene.timeoutNext === s.id ? 'selected' : ''}>Scene ${sIdx + 1}: ${s.title || 'Untitled'}</option>`
+                ).join('')}
+              </select>
+            </div>
+            <div class="form-group full-width">
+              <label>Choice Bell Offset (Seconds relative to audio end):</label>
+              <input type="number" step="0.5" class="form-input scene-offset-input" value="${scene.choiceOffset}" data-index="${index}" />
+            </div>
+          </div>
+
+          <!-- Choice buttons list -->
           <div class="choices-list-edit" id="choices-list-edit-${index}"></div>
         </div>
       `;
 
       container.appendChild(card);
 
-      // Choice rows
+      // Render Choice Rows
       const choicesContainer = card.querySelector(`#choices-list-edit-${index}`);
       scene.choices.forEach((choice, cIndex) => {
         const choiceRow = document.createElement('div');
