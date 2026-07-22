@@ -296,6 +296,30 @@ renderUI() {
     this.bindEvents();
   }
 
+      container.appendChild(card);
+
+      // Render Choice Rows
+      const choicesContainer = card.querySelector(`#choices-list-edit-${index}`);
+      scene.choices.forEach((choice, cIndex) => {
+        const choiceRow = document.createElement('div');
+        choiceRow.className = 'choice-edit-row';
+        choiceRow.innerHTML = `
+          <input type="text" class="form-input choice-text-input" placeholder="Choice Text" value="${choice.text}" data-sindex="${index}" data-cindex="${cIndex}" style="flex:2;" />
+          <select class="form-input choice-next-select" data-sindex="${index}" data-cindex="${cIndex}" style="flex:1.5;">
+            <option value="">-- Target Scene --</option>
+            ${this.scenes.map((s, sIdx) => 
+              `<option value="${s.id}" ${choice.next === s.id ? 'selected' : ''}>Scene ${sIdx + 1}: ${s.title || 'Untitled'}</option>`
+            ).join('')}
+          </select>
+          <button class="btn btn-danger btn-sm btn-delete-choice" data-sindex="${index}" data-cindex="${cIndex}">&times;</button>
+        `;
+        choicesContainer.appendChild(choiceRow);
+      });
+    });
+
+    this.bindEvents();
+  }
+
   bindEvents() {
     document.querySelectorAll('.scene-title-input').forEach(el => {
       el.onchange = (e) => {
