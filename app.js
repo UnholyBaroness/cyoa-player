@@ -5,7 +5,7 @@
 
 'use strict';
 
-// 1. SOUND ENGINE (Web Audio Church Bell & Click SFX)
+// 1. SOUND ENGINE
 class SoundEngine {
   constructor() {
     this.ctx = null;
@@ -158,7 +158,7 @@ class CYOAParser {
   }
 }
 
-// 3. STORY CREATOR BUILDER MODULE
+// 3. STORY CREATOR BUILDER MODULE (Automated Scene IDs & Dropdown Destination Selection)
 class CYOACreator {
   constructor(app) {
     this.app = app;
@@ -172,7 +172,8 @@ class CYOACreator {
         id: "scene001",
         title: "The Beginning",
         transcript: "Welcome to my story. Choose a path ahead.",
-        timer: 0,
+        timer: 10,
+        timeoutNext: "scene002",
         choiceOffset: 0.5,
         audioFile: null,
         choices: [
@@ -184,41 +185,63 @@ class CYOACreator {
         title: "The Ending",
         transcript: "Thank you for listening to my story!",
         timer: 0,
+        timeoutNext: "",
         choiceOffset: 0,
         audioFile: null,
         choices: []
       }
     ];
+    this.reindexScenes();
+  }
+
+  reindexScenes() {
+    this.scenes.forEach((sc, i) => {
+      const oldId = sc.id;
+      const num = i + 1;
+      const newId = "scene" + (num < 10 ? "00" + num : (num < 100 ? "0" + num : num));
+      sc.id = newId;
+
+      if (oldId && oldId !== newId) {
+        this.scenes.forEach(s => {
+          if (s.timeoutNext === oldId) s.timeoutNext = newId;
+          s.choices.forEach(c => {
+            if (c.next === oldId) c.next = newId;
+          });
+        });
+      }
+    });
   }
 
   renderUI() {
     const container = document.getElementById('creator-scenes-container');
     if (!container) return;
 
+    this.reindexScenes();
     container.innerHTML = '';
 
     this.scenes.forEach((scene, index) => {
       const card = document.createElement('div');
       card.className = 'scene-edit-card';
 
+      // Options for dropdowns showing Scene Titles
+      const sceneDropdownOptions = this.scenes.map((s, sIdx) => 
+        `<option value="${s.id}">Scene ${sIdx + 1}: ${s.title || 'Untitled'}</option>`
+      ).join('');
+
       card.innerHTML = `
         <div class="scene-edit-header">
-          <span class="scene-tag">Scene ${index + 1}: ${scene.id}</span>
+          <span class="scene-tag">Scene ${index + 1} (${scene.id})</span>
           ${this.scenes.length > 1 ? `<button class="btn btn-danger btn-sm btn-delete-scene" data-index="${index}">Delete Scene</button>` : ''}
         </div>
         <div class="form-grid">
-          <div class="form-group">
-            <label>Scene ID (unique):</label>
-            <input type="text" class="form-input scene-id-input" value="${scene.id}" data-index="${index}" />
-          </div>
-          <div class="form-group">
+          <div class="form-group full-width">
             <label>Scene Title:</label>
-            <input type="text" class="form-input scene-title-input" value="${scene.title}" data-index="${index}" />
+            <input type="text" class="form-input scene-title-input" value="${scene.title}" data-index="${index}" placeholder="Scene Title" />
           </div>
           <div class="form-group full-width">
             <label>Audio File (.mp3, .wav, .m4a):</label>
             <input type="file" accept="audio/*" class="form-input scene-audio-input" data-index="${index}" />
-            <span class="badge">${scene.audioFile ? 'File attached: ' + scene.audioFile.name : 'No audio attached'}</span>
+            <span class="badge" style="margin-top:4px;">${scene.audioFile ? 'File attached: ' + scene.audioFile.name : 'No audio attached'}</span>
           </div>
           <div class="form-group full-width">
             <label>Transcript / Narration Text:</label>
@@ -229,7 +252,16 @@ class CYOACreator {
             <input type="number" min="0" class="form-input scene-timer-input" value="${scene.timer}" data-index="${index}" />
           </div>
           <div class="form-group">
-            <label>Choice Bell Offset (Seconds relative to end):</label>
+            <label>On Timeout Jump To Scene:</label>
+            <select class="form-input scene-timeout-select" data-index="${index}">
+              <option value="">Default (First choice or next scene)</option>
+              ${this.scenes.map((s, sIdx) => 
+                `<option value="${s.id}" ${scene.timeoutNext === s.id ? 'selected' : ''}>Scene ${sIdx + 1}: ${s.title || 'Untitled'}</option>`
+              ).join('')}
+            </select>
+          </div>
+          <div class="form-group full-width">
+            <label>Choice Bell Offset (Seconds relative to audio end):</label>
             <input type="number" step="0.5" class="form-input scene-offset-input" value="${scene.choiceOffset}" data-index="${index}" />
           </div>
         </div>
@@ -244,14 +276,19 @@ class CYOACreator {
 
       container.appendChild(card);
 
-      // Render choice rows for this scene
+      // Choice rows
       const choicesContainer = card.querySelector(`#choices-list-edit-${index}`);
       scene.choices.forEach((choice, cIndex) => {
         const choiceRow = document.createElement('div');
         choiceRow.className = 'choice-edit-row';
         choiceRow.innerHTML = `
           <input type="text" class="form-input choice-text-input" placeholder="Choice Text" value="${choice.text}" data-sindex="${index}" data-cindex="${cIndex}" style="flex:2;" />
-          <input type="text" class="form-input choice-next-input" placeholder="Target Scene ID" value="${choice.next}" data-sindex="${index}" data-cindex="${cIndex}" style="flex:1;" />
+          <select class="form-input choice-next-select" data-sindex="${index}" data-cindex="${cIndex}" style="flex:1.5;">
+            <option value="">-- Target Scene --</option>
+            ${this.scenes.map((s, sIdx) => 
+              `<option value="${s.id}" ${choice.next === s.id ? 'selected' : ''}>Scene ${sIdx + 1}: ${s.title || 'Untitled'}</option>`
+            ).join('')}
+          </select>
           <button class="btn btn-danger btn-sm btn-delete-choice" data-sindex="${index}" data-cindex="${cIndex}">&times;</button>
         `;
         choicesContainer.appendChild(choiceRow);
@@ -262,12 +299,11 @@ class CYOACreator {
   }
 
   bindEvents() {
-    // Inputs updating state
-    document.querySelectorAll('.scene-id-input').forEach(el => {
-      el.onchange = (e) => { this.scenes[e.target.dataset.index].id = e.target.value.trim(); };
-    });
     document.querySelectorAll('.scene-title-input').forEach(el => {
-      el.onchange = (e) => { this.scenes[e.target.dataset.index].title = e.target.value; };
+      el.onchange = (e) => {
+        this.scenes[e.target.dataset.index].title = e.target.value;
+        this.renderUI(); // Re-render to update titles in choice dropdowns
+      };
     });
     document.querySelectorAll('.scene-transcript-input').forEach(el => {
       el.onchange = (e) => { this.scenes[e.target.dataset.index].transcript = e.target.value; };
@@ -275,11 +311,13 @@ class CYOACreator {
     document.querySelectorAll('.scene-timer-input').forEach(el => {
       el.onchange = (e) => { this.scenes[e.target.dataset.index].timer = parseFloat(e.target.value) || 0; };
     });
+    document.querySelectorAll('.scene-timeout-select').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.index].timeoutNext = e.target.value; };
+    });
     document.querySelectorAll('.scene-offset-input').forEach(el => {
       el.onchange = (e) => { this.scenes[e.target.dataset.index].choiceOffset = parseFloat(e.target.value) || 0; };
     });
 
-    // Audio File attachment
     document.querySelectorAll('.scene-audio-input').forEach(el => {
       el.onchange = (e) => {
         if (e.target.files.length > 0) {
@@ -289,23 +327,22 @@ class CYOACreator {
       };
     });
 
-    // Choice text & next inputs
     document.querySelectorAll('.choice-text-input').forEach(el => {
       el.onchange = (e) => {
         this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].text = e.target.value;
       };
     });
-    document.querySelectorAll('.choice-next-input').forEach(el => {
+    document.querySelectorAll('.choice-next-select').forEach(el => {
       el.onchange = (e) => {
-        this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].next = e.target.value.trim();
+        this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].next = e.target.value;
       };
     });
 
-    // Add / Delete Choice
     document.querySelectorAll('.btn-add-choice').forEach(el => {
       el.onclick = (e) => {
         const sIndex = e.target.dataset.index;
-        this.scenes[sIndex].choices.push({ text: "New Option", next: "scene002" });
+        const targetScene = this.scenes[sIndex + 1] ? this.scenes[sIndex + 1].id : (this.scenes[0] ? this.scenes[0].id : "");
+        this.scenes[sIndex].choices.push({ text: "New Option", next: targetScene });
         this.renderUI();
       };
     });
@@ -318,27 +355,29 @@ class CYOACreator {
       };
     });
 
-    // Delete Scene
     document.querySelectorAll('.btn-delete-scene').forEach(el => {
       el.onclick = (e) => {
         this.scenes.splice(e.target.dataset.index, 1);
+        this.reindexScenes();
         this.renderUI();
       };
     });
   }
 
   addScene() {
-    const idNum = this.scenes.length + 1;
-    const newId = "scene" + (idNum < 10 ? "00" + idNum : "0" + idNum);
+    const num = this.scenes.length + 1;
+    const newId = "scene" + (num < 10 ? "00" + num : (num < 100 ? "0" + num : num));
     this.scenes.push({
       id: newId,
-      title: "New Scene " + idNum,
+      title: "New Scene " + num,
       transcript: "",
       timer: 0,
+      timeoutNext: "",
       choiceOffset: 1.0,
       audioFile: null,
       choices: []
     });
+    this.reindexScenes();
     this.renderUI();
   }
 
@@ -356,6 +395,8 @@ class CYOACreator {
       alert("Please add at least one scene to your story.");
       return;
     }
+
+    this.reindexScenes();
 
     const zip = new JSZip();
     const manifest = {
@@ -381,6 +422,7 @@ class CYOACreator {
         audio: audioPath,
         transcript: scene.transcript,
         timer: scene.timer,
+        timeoutNext: scene.timeoutNext || undefined,
         choiceOffset: scene.choiceOffset,
         choices: scene.choices
       };
@@ -391,7 +433,6 @@ class CYOACreator {
     this.app.showToast("Generating .cyoa package...", "info");
     const blob = await zip.generateAsync({ type: "blob" });
 
-    // Trigger local download
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = title.toLowerCase().replace(/[^a-z0-9]/g, '_') + ".cyoa";
@@ -499,7 +540,6 @@ class CYOAPlayerApp {
       };
     }
 
-    // Creator Modal Listeners
     const openCreator = () => {
       this.creator.renderUI();
       if (this.dom.modalCreator) this.dom.modalCreator.classList.remove('hidden');
@@ -729,7 +769,6 @@ class CYOAPlayerApp {
     if (this.dom.choicesList) this.dom.choicesList.innerHTML = '';
     if (this.dom.endingOptions) this.dom.endingOptions.classList.add('hidden');
 
-    // FIX FOR ENDING SCREEN: Hide decision header & timer when 0 choices exist!
     if (choices.length === 0) {
       if (this.dom.choiceHeader) this.dom.choiceHeader.classList.add('hidden');
       if (this.dom.timerBarWrapper) this.dom.timerBarWrapper.classList.add('hidden');
@@ -738,7 +777,6 @@ class CYOAPlayerApp {
       return;
     }
 
-    // Story has choices!
     this.updateStatusTag('Awaiting Decision', 'status-awaiting');
     if (this.dom.choiceHeader) this.dom.choiceHeader.classList.remove('hidden');
 
