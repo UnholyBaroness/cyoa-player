@@ -1,6 +1,6 @@
 /**
- * CYOA AUDIO STUDIO PLAYER
- * Client-Side Interactive Branching Engine with Customizable Timers & Offsets
+ * CYOA AUDIO STUDIO PLAYER & CREATOR ENGINE
+ * Client-Side Interactive Engine with Builder & Package Exporter
  */
 
 'use strict';
@@ -158,7 +158,250 @@ class CYOAParser {
   }
 }
 
-// 3. MAIN PLAYER APP
+// 3. STORY CREATOR BUILDER MODULE
+class CYOACreator {
+  constructor(app) {
+    this.app = app;
+    this.scenes = [];
+    this.initDefaultTemplate();
+  }
+
+  initDefaultTemplate() {
+    this.scenes = [
+      {
+        id: "scene001",
+        title: "The Beginning",
+        transcript: "Welcome to my story. Choose a path ahead.",
+        timer: 0,
+        choiceOffset: 0.5,
+        audioFile: null,
+        choices: [
+          { text: "Go to Scene 2", next: "scene002" }
+        ]
+      },
+      {
+        id: "scene002",
+        title: "The Ending",
+        transcript: "Thank you for listening to my story!",
+        timer: 0,
+        choiceOffset: 0,
+        audioFile: null,
+        choices: []
+      }
+    ];
+  }
+
+  renderUI() {
+    const container = document.getElementById('creator-scenes-container');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    this.scenes.forEach((scene, index) => {
+      const card = document.createElement('div');
+      card.className = 'scene-edit-card';
+
+      card.innerHTML = `
+        <div class="scene-edit-header">
+          <span class="scene-tag">Scene ${index + 1}: ${scene.id}</span>
+          ${this.scenes.length > 1 ? `<button class="btn btn-danger btn-sm btn-delete-scene" data-index="${index}">Delete Scene</button>` : ''}
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Scene ID (unique):</label>
+            <input type="text" class="form-input scene-id-input" value="${scene.id}" data-index="${index}" />
+          </div>
+          <div class="form-group">
+            <label>Scene Title:</label>
+            <input type="text" class="form-input scene-title-input" value="${scene.title}" data-index="${index}" />
+          </div>
+          <div class="form-group full-width">
+            <label>Audio File (.mp3, .wav, .m4a):</label>
+            <input type="file" accept="audio/*" class="form-input scene-audio-input" data-index="${index}" />
+            <span class="badge">${scene.audioFile ? 'File attached: ' + scene.audioFile.name : 'No audio attached'}</span>
+          </div>
+          <div class="form-group full-width">
+            <label>Transcript / Narration Text:</label>
+            <textarea class="form-input form-textarea scene-transcript-input" rows="2" data-index="${index}">${scene.transcript}</textarea>
+          </div>
+          <div class="form-group">
+            <label>Timer (Seconds, 0 = unlimited):</label>
+            <input type="number" min="0" class="form-input scene-timer-input" value="${scene.timer}" data-index="${index}" />
+          </div>
+          <div class="form-group">
+            <label>Choice Bell Offset (Seconds relative to end):</label>
+            <input type="number" step="0.5" class="form-input scene-offset-input" value="${scene.choiceOffset}" data-index="${index}" />
+          </div>
+        </div>
+        <div class="choices-editor">
+          <div class="section-header">
+            <label><strong>Choices (${scene.choices.length}):</strong></label>
+            <button class="btn btn-secondary btn-sm btn-add-choice" data-index="${index}">+ Add Choice</button>
+          </div>
+          <div class="choices-list-edit" id="choices-list-edit-${index}"></div>
+        </div>
+      `;
+
+      container.appendChild(card);
+
+      // Render choice rows for this scene
+      const choicesContainer = card.querySelector(`#choices-list-edit-${index}`);
+      scene.choices.forEach((choice, cIndex) => {
+        const choiceRow = document.createElement('div');
+        choiceRow.className = 'choice-edit-row';
+        choiceRow.innerHTML = `
+          <input type="text" class="form-input choice-text-input" placeholder="Choice Text" value="${choice.text}" data-sindex="${index}" data-cindex="${cIndex}" style="flex:2;" />
+          <input type="text" class="form-input choice-next-input" placeholder="Target Scene ID" value="${choice.next}" data-sindex="${index}" data-cindex="${cIndex}" style="flex:1;" />
+          <button class="btn btn-danger btn-sm btn-delete-choice" data-sindex="${index}" data-cindex="${cIndex}">&times;</button>
+        `;
+        choicesContainer.appendChild(choiceRow);
+      });
+    });
+
+    this.bindEvents();
+  }
+
+  bindEvents() {
+    // Inputs updating state
+    document.querySelectorAll('.scene-id-input').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.index].id = e.target.value.trim(); };
+    });
+    document.querySelectorAll('.scene-title-input').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.index].title = e.target.value; };
+    });
+    document.querySelectorAll('.scene-transcript-input').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.index].transcript = e.target.value; };
+    });
+    document.querySelectorAll('.scene-timer-input').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.index].timer = parseFloat(e.target.value) || 0; };
+    });
+    document.querySelectorAll('.scene-offset-input').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.index].choiceOffset = parseFloat(e.target.value) || 0; };
+    });
+
+    // Audio File attachment
+    document.querySelectorAll('.scene-audio-input').forEach(el => {
+      el.onchange = (e) => {
+        if (e.target.files.length > 0) {
+          this.scenes[e.target.dataset.index].audioFile = e.target.files[0];
+          this.renderUI();
+        }
+      };
+    });
+
+    // Choice text & next inputs
+    document.querySelectorAll('.choice-text-input').forEach(el => {
+      el.onchange = (e) => {
+        this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].text = e.target.value;
+      };
+    });
+    document.querySelectorAll('.choice-next-input').forEach(el => {
+      el.onchange = (e) => {
+        this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].next = e.target.value.trim();
+      };
+    });
+
+    // Add / Delete Choice
+    document.querySelectorAll('.btn-add-choice').forEach(el => {
+      el.onclick = (e) => {
+        const sIndex = e.target.dataset.index;
+        this.scenes[sIndex].choices.push({ text: "New Option", next: "scene002" });
+        this.renderUI();
+      };
+    });
+    document.querySelectorAll('.btn-delete-choice').forEach(el => {
+      el.onclick = (e) => {
+        const sIndex = e.target.dataset.sindex;
+        const cIndex = e.target.dataset.cindex;
+        this.scenes[sIndex].choices.splice(cIndex, 1);
+        this.renderUI();
+      };
+    });
+
+    // Delete Scene
+    document.querySelectorAll('.btn-delete-scene').forEach(el => {
+      el.onclick = (e) => {
+        this.scenes.splice(e.target.dataset.index, 1);
+        this.renderUI();
+      };
+    });
+  }
+
+  addScene() {
+    const idNum = this.scenes.length + 1;
+    const newId = "scene" + (idNum < 10 ? "00" + idNum : "0" + idNum);
+    this.scenes.push({
+      id: newId,
+      title: "New Scene " + idNum,
+      transcript: "",
+      timer: 0,
+      choiceOffset: 1.0,
+      audioFile: null,
+      choices: []
+    });
+    this.renderUI();
+  }
+
+  async exportPackage() {
+    if (typeof JSZip === 'undefined') {
+      alert("JSZip library is not loaded.");
+      return;
+    }
+
+    const title = document.getElementById('create-title').value.trim() || "My Story";
+    const author = document.getElementById('create-author').value.trim() || "Creator";
+    const description = document.getElementById('create-description').value.trim();
+
+    if (this.scenes.length === 0) {
+      alert("Please add at least one scene to your story.");
+      return;
+    }
+
+    const zip = new JSZip();
+    const manifest = {
+      title,
+      author,
+      description,
+      start: this.scenes[0].id,
+      scenes: {}
+    };
+
+    const audioFolder = zip.folder("audio");
+
+    for (let scene of this.scenes) {
+      let audioPath = "";
+      if (scene.audioFile) {
+        const ext = scene.audioFile.name.split('.').pop();
+        audioPath = "audio/" + scene.id + "." + ext;
+        audioFolder.file(scene.id + "." + ext, scene.audioFile);
+      }
+
+      manifest.scenes[scene.id] = {
+        title: scene.title,
+        audio: audioPath,
+        transcript: scene.transcript,
+        timer: scene.timer,
+        choiceOffset: scene.choiceOffset,
+        choices: scene.choices
+      };
+    }
+
+    zip.file("story.json", JSON.stringify(manifest, null, 2));
+
+    this.app.showToast("Generating .cyoa package...", "info");
+    const blob = await zip.generateAsync({ type: "blob" });
+
+    // Trigger local download
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = title.toLowerCase().replace(/[^a-z0-9]/g, '_') + ".cyoa";
+    link.click();
+
+    this.app.showToast("Export complete! .cyoa file downloaded.", "success");
+  }
+}
+
+// 4. MAIN PLAYER APP CONTROLLER
 class CYOAPlayerApp {
   constructor() {
     this.soundEngine = new SoundEngine();
@@ -173,6 +416,7 @@ class CYOAPlayerApp {
 
     try {
       this.initDOMReferences();
+      this.creator = new CYOACreator(this);
       this.initEventListeners();
       console.log("CYOAPlayerApp initialized.");
     } catch (err) {
@@ -184,11 +428,13 @@ class CYOAPlayerApp {
     this.dom = {
       fileInput: document.getElementById('file-input'),
       btnOpenFile: document.getElementById('btn-open-file'),
+      btnCreateStory: document.getElementById('btn-create-story'),
       btnDemoStory: document.getElementById('btn-demo-story'),
       btnShortcuts: document.getElementById('btn-shortcuts'),
       welcomeScreen: document.getElementById('welcome-screen'),
       playerScreen: document.getElementById('player-screen'),
       btnHeroOpen: document.getElementById('btn-hero-open'),
+      btnHeroCreate: document.getElementById('btn-hero-create'),
       btnHeroDemo: document.getElementById('btn-hero-demo'),
       storyTitle: document.getElementById('story-title'),
       storyAuthor: document.getElementById('story-author'),
@@ -220,6 +466,7 @@ class CYOAPlayerApp {
       autoplayBlocker: document.getElementById('autoplay-blocker'),
       btnStartAutoplay: document.getElementById('btn-start-autoplay'),
       choiceContainer: document.getElementById('choice-container'),
+      choiceHeader: document.getElementById('choice-header'),
       choicesList: document.getElementById('choices-list'),
       timerBarWrapper: document.getElementById('timer-bar-wrapper'),
       timerSecondsText: document.getElementById('timer-seconds-text'),
@@ -230,14 +477,16 @@ class CYOAPlayerApp {
       dragDropOverlay: document.getElementById('drag-drop-overlay'),
       modalShortcuts: document.getElementById('modal-shortcuts'),
       btnCloseShortcuts: document.getElementById('btn-close-shortcuts'),
+      modalCreator: document.getElementById('modal-creator'),
+      btnCloseCreator: document.getElementById('btn-close-creator'),
+      btnAddScene: document.getElementById('btn-add-scene'),
+      btnExportCyoa: document.getElementById('btn-export-cyoa'),
       toastContainer: document.getElementById('toast-container')
     };
   }
 
   initEventListeners() {
-    const triggerFileSelect = () => {
-      if (this.dom.fileInput) this.dom.fileInput.click();
-    };
+    const triggerFileSelect = () => { if (this.dom.fileInput) this.dom.fileInput.click(); };
 
     if (this.dom.btnOpenFile) this.dom.btnOpenFile.onclick = triggerFileSelect;
     if (this.dom.btnHeroOpen) this.dom.btnHeroOpen.onclick = triggerFileSelect;
@@ -249,6 +498,17 @@ class CYOAPlayerApp {
         }
       };
     }
+
+    // Creator Modal Listeners
+    const openCreator = () => {
+      this.creator.renderUI();
+      if (this.dom.modalCreator) this.dom.modalCreator.classList.remove('hidden');
+    };
+    if (this.dom.btnCreateStory) this.dom.btnCreateStory.onclick = openCreator;
+    if (this.dom.btnHeroCreate) this.dom.btnHeroCreate.onclick = openCreator;
+    if (this.dom.btnCloseCreator) this.dom.btnCloseCreator.onclick = () => this.dom.modalCreator.classList.add('hidden');
+    if (this.dom.btnAddScene) this.dom.btnAddScene.onclick = () => this.creator.addScene();
+    if (this.dom.btnExportCyoa) this.dom.btnExportCyoa.onclick = () => this.creator.exportPackage();
 
     const loadDemo = () => this.loadDemoStory();
     if (this.dom.btnDemoStory) this.dom.btnDemoStory.onclick = loadDemo;
@@ -336,26 +596,14 @@ class CYOAPlayerApp {
 
   getSceneSettings(scene) {
     const defaults = (this.storyData && this.storyData.defaults) || {};
-    
-    // Resolve timer (number in seconds, 0 or null = no timer)
     let timer = 0;
-    if (typeof scene.timer === 'number') {
-      timer = scene.timer;
-    } else if (typeof defaults.timer === 'number') {
-      timer = defaults.timer;
-    }
+    if (typeof scene.timer === 'number') timer = scene.timer;
+    else if (typeof defaults.timer === 'number') timer = defaults.timer;
 
-    // Resolve choiceOffset / choiceDelay (seconds relative to audio end)
-    let choiceOffset = 1.5; // Default 1.5s after audio ends
-    if (typeof scene.choiceOffset === 'number') {
-      choiceOffset = scene.choiceOffset;
-    } else if (typeof scene.choiceDelay === 'number') {
-      choiceOffset = scene.choiceDelay;
-    } else if (typeof defaults.choiceOffset === 'number') {
-      choiceOffset = defaults.choiceOffset;
-    } else if (typeof defaults.choiceDelay === 'number') {
-      choiceOffset = defaults.choiceDelay;
-    }
+    let choiceOffset = 1.5;
+    if (typeof scene.choiceOffset === 'number') choiceOffset = scene.choiceOffset;
+    else if (typeof scene.choiceDelay === 'number') choiceOffset = scene.choiceDelay;
+    else if (typeof defaults.choiceOffset === 'number') choiceOffset = defaults.choiceOffset;
 
     return { timer, choiceOffset };
   }
@@ -371,7 +619,6 @@ class CYOAPlayerApp {
     const dur = this.dom.audio.duration;
     const cur = this.dom.audio.currentTime;
 
-    // Negative offset: Triggers choices BEFORE audio ends!
     if (choiceOffset < 0 && dur > 0 && cur >= (dur + choiceOffset)) {
       this.choicesRevealed = true;
       this.soundEngine.playChurchBell();
@@ -380,7 +627,7 @@ class CYOAPlayerApp {
   }
 
   handleAudioEnded() {
-    if (this.choicesRevealed) return; // Already revealed by negative offset!
+    if (this.choicesRevealed) return;
 
     const scene = this.storyData && this.storyData.scenes && this.storyData.scenes[this.currentSceneId];
     const { choiceOffset } = this.getSceneSettings(scene || {});
@@ -473,7 +720,6 @@ class CYOAPlayerApp {
   }
 
   revealChoices() {
-    this.updateStatusTag('Awaiting Decision', 'status-awaiting');
     if (this.dom.narrationBanner) this.dom.narrationBanner.classList.add('hidden');
     if (this.dom.choiceContainer) this.dom.choiceContainer.classList.remove('hidden');
 
@@ -483,10 +729,18 @@ class CYOAPlayerApp {
     if (this.dom.choicesList) this.dom.choicesList.innerHTML = '';
     if (this.dom.endingOptions) this.dom.endingOptions.classList.add('hidden');
 
+    // FIX FOR ENDING SCREEN: Hide decision header & timer when 0 choices exist!
     if (choices.length === 0) {
+      if (this.dom.choiceHeader) this.dom.choiceHeader.classList.add('hidden');
+      if (this.dom.timerBarWrapper) this.dom.timerBarWrapper.classList.add('hidden');
       if (this.dom.endingOptions) this.dom.endingOptions.classList.remove('hidden');
+      this.updateStatusTag('Completed', 'status-stopped');
       return;
     }
+
+    // Story has choices!
+    this.updateStatusTag('Awaiting Decision', 'status-awaiting');
+    if (this.dom.choiceHeader) this.dom.choiceHeader.classList.remove('hidden');
 
     choices.forEach((choice, index) => {
       const btn = document.createElement('button');
@@ -649,6 +903,7 @@ class CYOAPlayerApp {
     }
     if (e.key === 'Escape') {
       this.toggleShortcutsModal(false);
+      if (this.dom.modalCreator) this.dom.modalCreator.classList.add('hidden');
       return;
     }
     if (this.dom.playerScreen && this.dom.playerScreen.classList.contains('hidden')) return;
@@ -698,9 +953,6 @@ class CYOAPlayerApp {
         author: "A. Storyteller",
         description: "An interactive audio story showcasing custom timers and choice offsets.",
         start: "scene001",
-        defaults: {
-          choiceOffset: 1.0
-        },
         scenes: {
           scene001: {
             title: "The Cavern Entrance",
@@ -717,7 +969,7 @@ class CYOAPlayerApp {
             audio: "audio/scene002.wav",
             transcript: "Up ahead, you hear rushing water. You have 8 seconds to make a choice!",
             timer: 8,
-            choiceOffset: -1.5, // Chime bell 1.5s BEFORE audio finishes!
+            choiceOffset: -1.5,
             timeoutNext: "scene003",
             choices: [
               { text: "Follow the echoing water", next: "scene003" },
