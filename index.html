@@ -31,7 +31,6 @@
       </div>
 
       <div class="header-actions">
-        <!-- Hidden file input for picking .cyoa files -->
         <input type="file" id="file-input" accept=".cyoa,.zip" class="sr-only" aria-label="Select CYOA file" />
         
         <button id="btn-open-file" class="btn btn-primary">
@@ -143,22 +142,6 @@
       <!-- Central Media & Decision Card Zone -->
       <div class="central-media-card">
 
-        <!-- Dynamic Cover Artwork -->
-        <div id="scene-image-container" class="scene-image-container hidden">
-          <img id="scene-image" src="" alt="Scene Artwork" />
-        </div>
-
-        <!-- Active Playing Narration Banner -->
-        <div id="narration-status-banner" class="narration-banner">
-          <div class="audio-pulse-indicator">
-            <span class="pulse-bar"></span>
-            <span class="pulse-bar"></span>
-            <span class="pulse-bar"></span>
-            <span class="pulse-bar"></span>
-          </div>
-          <p id="narration-status-text">Listening to scene narration...</p>
-        </div>
-
         <!-- Autoplay Blocker Prompt -->
         <div id="autoplay-blocker" class="autoplay-card hidden">
           <div class="autoplay-content">
@@ -211,19 +194,6 @@
             </div>
           </div>
 
-        </div>
-
-        <!-- Transcript Accordion -->
-        <div class="transcript-section">
-          <button id="btn-toggle-transcript" class="btn-transcript-toggle" aria-expanded="false" aria-controls="transcript-body">
-            <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-            <span>Audio Transcript / Narration Text</span>
-          </button>
-          <div id="transcript-body" class="transcript-body hidden" aria-live="polite">
-            <p id="transcript-text">No transcript provided for this scene.</p>
-          </div>
         </div>
 
       </div>
@@ -338,9 +308,7 @@
             <h3>2. Story Scenes</h3>
             <button id="btn-add-scene" class="btn btn-secondary btn-sm">+ Add Scene</button>
           </div>
-          <div id="creator-scenes-container" class="creator-scenes-container">
-            <!-- Scene editor cards dynamically rendered here -->
-          </div>
+          <div id="creator-scenes-container" class="creator-scenes-container"></div>
         </div>
 
       </div>
