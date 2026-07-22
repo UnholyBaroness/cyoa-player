@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CYOA Audio Player - Interactive Audio Experience</title>
-  <meta name="description" content="A client-side interactive audio story player for .cyoa packages." />
+  <title>CYOA Audio Studio & Creator</title>
+  <meta name="description" content="A client-side interactive audio story player and creator for .cyoa packages." />
   
-  <!-- Google Fonts for Audiobook Styling -->
+  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap" rel="stylesheet">
   
-  <!-- JSZip Library for ZIP extraction -->
+  <!-- JSZip Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   
   <link rel="stylesheet" href="style.css" />
@@ -40,14 +40,23 @@
             <polyline points="17 8 12 3 7 8"></polyline>
             <line x1="12" y1="3" x2="12" y2="15"></line>
           </svg>
-          Open .cyoa File
+          Open .cyoa
+        </button>
+
+        <button id="btn-create-story" class="btn btn-accent" title="Build & export your own .cyoa story package">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="16"></line>
+            <line x1="8" y1="12" x2="16" y2="12"></line>
+          </svg>
+          Create Story
         </button>
 
         <button id="btn-demo-story" class="btn btn-secondary" title="Load sample story to test player">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="5 3 19 12 5 21 5 3"></polygon>
           </svg>
-          Demo Story
+          Demo
         </button>
 
         <button id="btn-shortcuts" class="btn btn-icon-only" aria-label="Keyboard Shortcuts" title="Keyboard Shortcuts (?)">
@@ -88,8 +97,8 @@
             <path d="M12 3v18M3 12h18M5.5 5.5l13 13M18.5 5.5l-13 13"/>
           </svg>
         </div>
-        <h1 id="welcome-heading">Interactive Audio Player</h1>
-        <p class="hero-subtitle">Load branching audio experiences (.cyoa) directly in your browser. Private, offline-capable, and completely client-side.</p>
+        <h1 id="welcome-heading">Interactive Audio Studio</h1>
+        <p class="hero-subtitle">Play branching audio stories or create your own .cyoa package directly in your browser. Private, offline-capable, and completely client-side.</p>
         
         <div class="hero-actions">
           <button id="btn-hero-open" class="btn btn-primary btn-large">
@@ -100,8 +109,11 @@
             </svg>
             Select .cyoa File
           </button>
+          <button id="btn-hero-create" class="btn btn-accent btn-large">
+            Create Your Own Story
+          </button>
           <button id="btn-hero-demo" class="btn btn-secondary btn-large">
-            Play Built-in Demo
+            Play Demo Story
           </button>
         </div>
 
@@ -131,6 +143,22 @@
       <!-- Central Media & Decision Card Zone -->
       <div class="central-media-card">
 
+        <!-- Dynamic Cover Artwork -->
+        <div id="scene-image-container" class="scene-image-container hidden">
+          <img id="scene-image" src="" alt="Scene Artwork" />
+        </div>
+
+        <!-- Active Playing Narration Banner -->
+        <div id="narration-status-banner" class="narration-banner">
+          <div class="audio-pulse-indicator">
+            <span class="pulse-bar"></span>
+            <span class="pulse-bar"></span>
+            <span class="pulse-bar"></span>
+            <span class="pulse-bar"></span>
+          </div>
+          <p id="narration-status-text">Listening to scene narration...</p>
+        </div>
+
         <!-- Autoplay Blocker Prompt -->
         <div id="autoplay-blocker" class="autoplay-card hidden">
           <div class="autoplay-content">
@@ -143,10 +171,10 @@
           </div>
         </div>
 
-        <!-- Decision & Choices Card (Appears here when audio finishes & church bell chimes!) -->
+        <!-- Decision & Choices Card -->
         <div id="choice-container" class="choice-container hidden" aria-live="polite">
           
-          <div class="choice-header">
+          <div id="choice-header" class="choice-header">
             <div class="bell-indicator">
               <svg class="bell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
@@ -169,9 +197,7 @@
           </div>
 
           <!-- Dynamic Choice Buttons List -->
-          <div id="choices-list" class="choices-list" role="group" aria-label="Story Choices">
-            <!-- Choice buttons generated dynamically -->
-          </div>
+          <div id="choices-list" class="choices-list" role="group" aria-label="Story Choices"></div>
 
           <!-- Ending Screen Options -->
           <div id="ending-options" class="ending-options hidden">
@@ -187,12 +213,23 @@
 
         </div>
 
+        <!-- Transcript Accordion -->
+        <div class="transcript-section">
+          <button id="btn-toggle-transcript" class="btn-transcript-toggle" aria-expanded="false" aria-controls="transcript-body">
+            <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+            <span>Audio Transcript / Narration Text</span>
+          </button>
+          <div id="transcript-body" class="transcript-body hidden" aria-live="polite">
+            <p id="transcript-text">No transcript provided for this scene.</p>
+          </div>
+        </div>
+
       </div>
 
       <!-- Audio Controls Card -->
       <div class="player-controls-card">
-        
-        <!-- Progress Scrubbing Bar -->
         <div class="progress-container">
           <span id="time-current" class="time-label">00:00</span>
           <div class="slider-wrapper">
@@ -202,9 +239,7 @@
           <span id="time-duration" class="time-label">00:00</span>
         </div>
 
-        <!-- Central Player Buttons -->
         <div class="controls-row">
-          
           <div class="secondary-controls-left">
             <button id="btn-restart-scene" class="btn-control-secondary" aria-label="Restart Scene" title="Restart Scene (R)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -220,7 +255,6 @@
             </button>
           </div>
 
-          <!-- Play / Pause Main Trigger -->
           <button id="btn-play-pause" class="btn-play-pause" aria-label="Play or Pause audio" title="Play/Pause (Space / K)">
             <svg id="icon-play" class="play-icon" viewBox="0 0 24 24" fill="currentColor">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -239,7 +273,6 @@
               <span class="control-subtext">+10s</span>
             </button>
 
-            <!-- Playback Speed Dropdown -->
             <div class="speed-selector-wrapper">
               <select id="select-speed" class="speed-select" aria-label="Playback Speed" title="Playback Speed">
                 <option value="0.75">0.75x</option>
@@ -250,10 +283,8 @@
               </select>
             </div>
           </div>
-
         </div>
 
-        <!-- Volume Bar -->
         <div class="volume-container">
           <button id="btn-mute" class="btn-mute" aria-label="Mute / Unmute" title="Mute/Unmute (M)">
             <svg id="icon-volume-high" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -267,19 +298,71 @@
           </button>
           <input type="range" id="volume-slider" class="volume-slider" min="0" max="1" step="0.05" value="1" aria-label="Volume level" />
         </div>
-
       </div>
 
     </section>
 
   </main>
 
-  <!-- Keyboard Shortcuts Reference Modal -->
-  <div id="modal-shortcuts" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
+  <!-- Interactive .cyoa Creator Tool Modal -->
+  <div id="modal-creator" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="creator-modal-title">
+    <div class="modal-card modal-large">
+      <div class="modal-header">
+        <h2 id="creator-modal-title">CYOA Package Builder</h2>
+        <button id="btn-close-creator" class="btn-close-modal" aria-label="Close creator modal">&times;</button>
+      </div>
+      <div class="modal-body creator-body">
+        
+        <!-- Story Info Form -->
+        <div class="creator-section">
+          <h3>1. Story Metadata</h3>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="create-title">Story Title:</label>
+              <input type="text" id="create-title" class="form-input" placeholder="e.g. My Audio Adventure" value="My Audio Adventure" />
+            </div>
+            <div class="form-group">
+              <label for="create-author">Author Name:</label>
+              <input type="text" id="create-author" class="form-input" placeholder="e.g. Jane Doe" value="Anonymous" />
+            </div>
+            <div class="form-group full-width">
+              <label for="create-description">Story Description:</label>
+              <textarea id="create-description" class="form-input form-textarea" rows="2" placeholder="Brief summary of your interactive story..."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scene Builder List -->
+        <div class="creator-section">
+          <div class="section-header">
+            <h3>2. Story Scenes</h3>
+            <button id="btn-add-scene" class="btn btn-secondary btn-sm">+ Add Scene</button>
+          </div>
+          <div id="creator-scenes-container" class="creator-scenes-container">
+            <!-- Scene editor cards dynamically rendered here -->
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button id="btn-export-cyoa" class="btn btn-primary btn-large">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Export & Download .cyoa Package
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Modal -->
+  <div id="modal-shortcuts" class="modal-overlay hidden" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div class="modal-header">
-        <h2 id="shortcuts-modal-title">Keyboard Shortcuts</h2>
-        <button id="btn-close-shortcuts" class="btn-close-modal" aria-label="Close shortcuts modal">&times;</button>
+        <h2>Keyboard Shortcuts</h2>
+        <button id="btn-close-shortcuts" class="btn-close-modal">&times;</button>
       </div>
       <div class="modal-body">
         <ul class="shortcuts-list">
@@ -296,10 +379,10 @@
     </div>
   </div>
 
-  <!-- Toast Notification System -->
+  <!-- Toast Container -->
   <div id="toast-container" class="toast-container" aria-live="assertive"></div>
 
-  <!-- HTML5 Audio Element -->
+  <!-- Audio Element -->
   <audio id="audio-element" class="sr-only" preload="auto"></audio>
 
   <script src="app.js"></script>
