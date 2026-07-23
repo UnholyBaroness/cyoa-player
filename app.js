@@ -686,6 +686,7 @@ class CYOACreator {
       };
     });
 
+    // Secondary Sound Handlers
     document.querySelectorAll('.btn-add-sec-sound').forEach(el => {
       el.onclick = (e) => {
         const sIdx = e.target.dataset.index;
@@ -1439,7 +1440,7 @@ class CYOAPlayerApp {
     actions.forEach(a => this.applyAction(a, variables));
   }
 
-  // --- FLOWCHART MODAL METHODS WITH GUTTER ROUTING & CARD HOVER LOGIC ---
+  // --- FLOWCHART MODAL METHODS WITH GUTTER ROUTING & CARD HOVER RESTORATION ---
   openFlowchartModal() {
     if (!this.storyData) return;
     this.renderFlowchart();
@@ -1628,40 +1629,67 @@ class CYOAPlayerApp {
           const itemRect = item.getBoundingClientRect();
           const targetRect = targetCard.getBoundingClientRect();
 
+          const cardARect = card.getBoundingClientRect();
+          const cardBRect = targetCard.getBoundingClientRect();
+
+          const cA_left = cardARect.left - wrapperRect.left + wrapper.scrollLeft;
+          const cA_right = cardARect.right - wrapperRect.left + wrapper.scrollLeft;
+          const cB_left = cardBRect.left - wrapperRect.left + wrapper.scrollLeft;
+          const cB_right = cardBRect.right - wrapperRect.left + wrapper.scrollLeft;
+
           const x1 = (itemRect.right - wrapperRect.left) + wrapper.scrollLeft;
           const y1 = (itemRect.top + itemRect.height / 2 - wrapperRect.top) + wrapper.scrollTop;
           
-          const x2 = (targetRect.left - wrapperRect.left) + wrapper.scrollLeft;
-          const y2 = (targetRect.top + targetRect.height / 2 - wrapperRect.top) + wrapper.scrollTop;
+          let x2 = cB_left;
+          const y2 = (targetRect.top + 25 - wrapperRect.top) + wrapper.scrollTop;
 
-          // Compute Gutter X channel outside of card boxes
-          const cardCol = card.parentElement;
-          const targetCol = targetCard.parentElement;
-          const colRect = cardCol.getBoundingClientRect();
-
-          let gutterX = (colRect.right - wrapperRect.left) + wrapper.scrollLeft + 25;
-          if (targetCol && targetCol !== cardCol) {
-            const targetColRect = targetCol.getBoundingClientRect();
-            if (targetColRect.left > colRect.right) {
-              gutterX = (colRect.right - wrapperRect.left) + (targetColRect.left - colRect.right) / 2 + wrapper.scrollLeft;
-            }
-          }
-
-          // Smooth Orthogonal Path Routing around cards
           const radius = 10;
-          const dy = y2 >= y1 ? 1 : -1;
-          const dirX = x2 >= gutterX ? 1 : -1;
-
           let d = '';
-          if (Math.abs(y2 - y1) < 12) {
-            d = `M ${x1} ${y1} L ${x2} ${y2}`;
-          } else {
+
+          // Target is to the LEFT or BACKWARD link (e.g. Green lines in Images 8 & 9)
+          if (cB_left < cA_left - 30) {
+            const topMarginY = 25;
+            const startX = cA_left - 15;
+            
             d = `M ${x1} ${y1} ` +
-                `L ${gutterX - radius} ${y1} ` +
-                `Q ${gutterX} ${y1}, ${gutterX} ${y1 + radius * dy} ` +
-                `L ${gutterX} ${y2 - radius * dy} ` +
-                `Q ${gutterX} ${y2}, ${gutterX + dirX * radius} ${y2} ` +
-                `L ${x2} ${y2}`;
+                `L ${cA_right + 15 - radius} ${y1} ` +
+                `Q ${cA_right + 15} ${y1}, ${cA_right + 15} ${y1 - radius} ` +
+                `L ${cA_right + 15} ${topMarginY + radius} ` +
+                `Q ${cA_right + 15} ${topMarginY}, ${cA_right + 15 - radius} ${topMarginY} ` +
+                `L ${cB_left - 15 + radius} ${topMarginY} ` +
+                `Q ${cB_left - 15} ${topMarginY}, ${cB_left - 15} ${topMarginY + radius} ` +
+                `L ${cB_left - 15} ${y2 - radius} ` +
+                `Q ${cB_left - 15} ${y2}, ${cB_left - 15 + radius} ${y2} ` +
+                `L ${cB_left} ${y2}`;
+          }
+          // Target is in SAME COLUMN (e.g. Green lines in Image 7)
+          else if (Math.abs(cB_left - cA_left) < 30) {
+            const rightGutterX = cA_right + 25;
+            const dy = y2 >= y1 ? 1 : -1;
+
+            d = `M ${x1} ${y1} ` +
+                `L ${rightGutterX - radius} ${y1} ` +
+                `Q ${rightGutterX} ${y1}, ${rightGutterX} ${y1 + radius * dy} ` +
+                `L ${rightGutterX} ${y2 - radius * dy} ` +
+                `Q ${rightGutterX} ${y2}, ${rightGutterX - radius} ${y2} ` +
+                `L ${cB_right} ${y2}`;
+            x2 = cB_right;
+          }
+          // Forward link to a RIGHT column
+          else {
+            const channelX = cA_right + (cB_left - cA_right) / 2;
+            const dy = y2 >= y1 ? 1 : -1;
+
+            if (Math.abs(y2 - y1) < 12) {
+              d = `M ${x1} ${y1} L ${x2} ${y2}`;
+            } else {
+              d = `M ${x1} ${y1} ` +
+                  `L ${channelX - radius} ${y1} ` +
+                  `Q ${channelX} ${y1}, ${channelX} ${y1 + radius * dy} ` +
+                  `L ${channelX} ${y2 - radius * dy} ` +
+                  `Q ${channelX} ${y2}, ${channelX + radius} ${y2} ` +
+                  `L ${x2} ${y2}`;
+            }
           }
 
           const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -1681,27 +1709,34 @@ class CYOAPlayerApp {
           // Individual Choice Hover Handler
           item.onmouseenter = (e) => {
             e.stopPropagation();
-            // Hide all lines from this scene first
             svg.querySelectorAll(`path[data-from="${fromId}"]`).forEach(p => {
               p.classList.remove('line-highlight');
               if (this.settings.flowchartLineMode === 'hover') p.style.display = 'none';
             });
-            // Highlight ONLY this choice's line
             path.style.display = 'block';
             path.classList.add('line-highlight');
           };
 
           item.onmouseleave = (e) => {
             e.stopPropagation();
+            path.classList.remove('line-highlight');
             if (this.settings.flowchartLineMode === 'hover') {
               path.style.display = 'none';
             }
-            path.classList.remove('line-highlight');
+
+            // RESTORE DEFAULT TIMEOUT HOVER IF MOUSE REMAINS INSIDE CARD
+            if (card.contains(e.relatedTarget) && defaultTargetId) {
+              const defaultPath = svg.querySelector(`path[data-from="${fromId}"][data-to="${defaultTargetId}"]`);
+              if (defaultPath) {
+                defaultPath.style.display = 'block';
+                defaultPath.classList.add('line-highlight');
+              }
+            }
           };
         }
       });
 
-      // Card Hover Handler: Highlights ONLY the default timeout choice arrow
+      // Card Hover Handler: Highlights ONLY default timeout choice arrow
       card.onmouseenter = () => {
         svg.querySelectorAll(`path[data-from="${fromId}"]`).forEach(p => {
           p.classList.remove('line-highlight');
