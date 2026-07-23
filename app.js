@@ -170,10 +170,7 @@ class CYOACreator {
         timeoutNext: "scene002",
         choiceOffset: 0.5,
         audioFile: null,
-        secondaryAudioFile: null,
-        secondaryStartTime: 0,
-        secondaryVolume: 1.0,
-        secondaryPersist: false,
+        secondarySounds: [],
         choices: [
           { text: "Go to Scene 2", next: "scene002", actions: [], conditionGate: "AND", conditions: [] }
         ]
@@ -185,10 +182,7 @@ class CYOACreator {
         timeoutNext: "",
         choiceOffset: 0,
         audioFile: null,
-        secondaryAudioFile: null,
-        secondaryStartTime: 0,
-        secondaryVolume: 1.0,
-        secondaryPersist: false,
+        secondarySounds: [],
         choices: []
       }
     ];
@@ -213,6 +207,29 @@ class CYOACreator {
     const sceneKeys = Object.keys(storyData.scenes);
     this.scenes = sceneKeys.map((key, index) => {
       const sc = storyData.scenes[key];
+      let secSounds = [];
+      if (Array.isArray(sc.secondarySounds)) {
+        secSounds = sc.secondarySounds.map((s, sIdx) => ({
+          id: s.id || ("sec_" + sIdx),
+          audioFile: null,
+          startTime: typeof s.startTime === 'number' ? s.startTime : 0,
+          volume: typeof s.volume === 'number' ? s.volume : 1.0,
+          persist: Boolean(s.persist),
+          conditionGate: s.conditionGate || "AND",
+          conditions: s.conditions || []
+        }));
+      } else if (sc.secondaryAudio) {
+        secSounds.push({
+          id: "sec_0",
+          audioFile: null,
+          startTime: typeof sc.secondaryStartTime === 'number' ? sc.secondaryStartTime : 0,
+          volume: typeof sc.secondaryVolume === 'number' ? sc.secondaryVolume : 1.0,
+          persist: Boolean(sc.secondaryPersist),
+          conditionGate: "AND",
+          conditions: []
+        });
+      }
+
       return {
         id: key,
         title: sc.title || ("Scene " + (index + 1)),
@@ -220,10 +237,7 @@ class CYOACreator {
         timeoutNext: sc.timeoutNext || "",
         choiceOffset: typeof sc.choiceOffset === 'number' ? sc.choiceOffset : 1.0,
         audioFile: null,
-        secondaryAudioFile: null,
-        secondaryStartTime: typeof sc.secondaryStartTime === 'number' ? sc.secondaryStartTime : 0,
-        secondaryVolume: typeof sc.secondaryVolume === 'number' ? sc.secondaryVolume : 1.0,
-        secondaryPersist: Boolean(sc.secondaryPersist),
+        secondarySounds: secSounds,
         choices: (sc.choices || []).map(c => ({
           text: c.text,
           next: c.next || "",
@@ -268,6 +282,21 @@ class CYOACreator {
     this.variables.forEach((v, idx) => {
       const row = document.createElement('div');
       row.className = 'variable-edit-row';
+
+      let defaultInputHtml = '';
+      if (v.type === 'boolean') {
+        defaultInputHtml = `
+          <select class="form-input var-default-input" data-vindex="${idx}" style="flex: 1.2;">
+            <option value="false" ${!v.default ? 'selected' : ''}>False</option>
+            <option value="true" ${v.default ? 'selected' : ''}>True</option>
+          </select>
+        `;
+      } else if (v.type === 'float') {
+        defaultInputHtml = `<input type="number" step="any" class="form-input var-default-input" value="${v.default !== undefined ? v.default : 0}" data-vindex="${idx}" placeholder="Default Float" style="flex: 1.2;" />`;
+      } else {
+        defaultInputHtml = `<input type="text" class="form-input var-default-input" value="${v.default !== undefined ? v.default : ''}" data-vindex="${idx}" placeholder="Default String" style="flex: 1.2;" />`;
+      }
+
       row.innerHTML = `
         <input type="text" class="form-input var-name-input" value="${v.name}" data-vindex="${idx}" placeholder="Variable Name" style="flex: 1.5;" />
         <select class="form-input var-type-select" data-vindex="${idx}" style="flex: 1;">
@@ -275,7 +304,7 @@ class CYOACreator {
           <option value="string" ${v.type === 'string' ? 'selected' : ''}>String</option>
           <option value="float" ${v.type === 'float' ? 'selected' : ''}>Float</option>
         </select>
-        <input type="text" class="form-input var-default-input" value="${v.default}" data-vindex="${idx}" placeholder="Default Value" style="flex: 1.2;" />
+        ${defaultInputHtml}
         <button class="btn btn-danger btn-sm btn-delete-var" data-vindex="${idx}">&times;</button>
       `;
       container.appendChild(row);
@@ -338,27 +367,13 @@ class CYOACreator {
           </div>
         </div>
 
-        <!-- Overlaid Secondary Sound Settings -->
+        <!-- Multiple Overlaid Secondary Sounds Section -->
         <div class="secondary-sound-section">
-          <label><strong>Overlaid Secondary Sound (SFX / Music):</strong></label>
-          <div class="form-grid" style="margin-top: 0.5rem;">
-            <div class="form-group full-width">
-              <input type="file" accept="audio/*" class="form-input scene-secondary-audio-input" data-index="${index}" />
-              <span class="badge">${scene.secondaryAudioFile ? 'Overlaid Audio: ' + scene.secondaryAudioFile.name : 'No secondary audio'}</span>
-            </div>
-            <div class="form-group">
-              <label>Start Timestamp (Sec):</label>
-              <input type="number" step="0.1" min="0" class="form-input scene-sec-start-input" value="${scene.secondaryStartTime}" data-index="${index}" />
-            </div>
-            <div class="form-group">
-              <label>Relative Volume (0.0 to 1.0):</label>
-              <input type="number" step="0.1" min="0" max="1" class="form-input scene-sec-vol-input" value="${scene.secondaryVolume}" data-index="${index}" />
-            </div>
-            <div class="form-group full-width" style="flex-direction: row; align-items: center; gap: 0.5rem;">
-              <input type="checkbox" id="sec-persist-${index}" class="scene-sec-persist-checkbox" ${scene.secondaryPersist ? 'checked' : ''} data-index="${index}" />
-              <label for="sec-persist-${index}" style="margin: 0; cursor: pointer;">Persist Audio Across Scenes (Continue playing into next scene)</label>
-            </div>
+          <div class="section-header">
+            <label><strong>Overlaid Secondary Sounds (${(scene.secondarySounds || []).length}):</strong></label>
+            <button class="btn btn-secondary btn-sm btn-add-sec-sound" data-index="${index}">+ Add Secondary Sound</button>
           </div>
+          <div class="sec-sounds-list" id="sec-sounds-list-${index}"></div>
         </div>
 
         <div class="choices-editor">
@@ -393,10 +408,44 @@ class CYOACreator {
 
       container.appendChild(card);
 
+      // Render Secondary Sound Cards
+      const secListContainer = card.querySelector(`#sec-sounds-list-${index}`);
+      (scene.secondarySounds || []).forEach((secSound, secIdx) => {
+        const secCard = document.createElement('div');
+        secCard.className = 'choice-edit-box';
+        secCard.innerHTML = `
+          <div class="choice-edit-main-row">
+            <span style="font-size: 0.8rem; font-weight: 700; color: var(--accent-purple);">Sound #${secIdx + 1}</span>
+            <input type="file" accept="audio/*" class="form-input sec-audio-file-input" data-sindex="${index}" data-secindex="${secIdx}" style="flex:2;" />
+            <button class="btn btn-danger btn-sm btn-delete-sec-sound" data-sindex="${index}" data-secindex="${secIdx}">&times;</button>
+          </div>
+          <div class="form-grid" style="margin-top:0.4rem;">
+            <div class="form-group">
+              <label>Start Timestamp (Sec):</label>
+              <input type="number" step="0.1" min="0" class="form-input sec-start-input" value="${secSound.startTime}" data-sindex="${index}" data-secindex="${secIdx}" />
+            </div>
+            <div class="form-group">
+              <label>Relative Volume (e.g. 1.0, 1.5, 2.0):</label>
+              <input type="number" step="0.1" min="0" class="form-input sec-vol-input" value="${secSound.volume}" data-sindex="${index}" data-secindex="${secIdx}" />
+            </div>
+            <div class="form-group full-width" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+              <input type="checkbox" id="sec-persist-${index}-${secIdx}" class="sec-persist-input" ${secSound.persist ? 'checked' : ''} data-sindex="${index}" data-secindex="${secIdx}" />
+              <label for="sec-persist-${index}-${secIdx}" style="margin: 0; cursor: pointer;">Persist Audio Across Scenes (Continue playing into next scene)</label>
+            </div>
+          </div>
+        `;
+        secListContainer.appendChild(secCard);
+      });
+
+      // Render Choices List
       const choicesContainer = card.querySelector(`#choices-list-edit-${index}`);
       scene.choices.forEach((choice, cIndex) => {
         const choiceRow = document.createElement('div');
         choiceRow.className = 'choice-edit-box';
+
+        const condCount = choice.conditions ? choice.conditions.length : 0;
+        const showGate = condCount >= 2;
+
         choiceRow.innerHTML = `
           <div class="choice-edit-main-row">
             <input type="text" class="form-input choice-text-input" placeholder="Choice Button Text" value="${choice.text}" data-sindex="${index}" data-cindex="${cIndex}" style="flex:2;" />
@@ -409,31 +458,31 @@ class CYOACreator {
             <button class="btn btn-danger btn-sm btn-delete-choice" data-sindex="${index}" data-cindex="${cIndex}">&times;</button>
           </div>
 
-          <!-- Variable Conditions Rules with Logic Gates -->
           <div class="choice-sub-editor">
             <div class="sub-editor-header">
               <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span>Gate:</span>
-                <select class="form-input cond-gate-select" data-sindex="${index}" data-cindex="${cIndex}">
-                  <option value="AND" ${(choice.conditionGate || 'AND') === 'AND' ? 'selected' : ''}>AND</option>
-                  <option value="OR" ${choice.conditionGate === 'OR' ? 'selected' : ''}>OR</option>
-                  <option value="NAND" ${choice.conditionGate === 'NAND' ? 'selected' : ''}>NAND</option>
-                  <option value="NOR" ${choice.conditionGate === 'NOR' ? 'selected' : ''}>NOR</option>
-                  <option value="XOR" ${choice.conditionGate === 'XOR' ? 'selected' : ''}>XOR</option>
-                  <option value="XNOR" ${choice.conditionGate === 'XNOR' ? 'selected' : ''}>XNOR</option>
-                  <option value="NOT" ${choice.conditionGate === 'NOT' ? 'selected' : ''}>NOT</option>
-                </select>
+                <span>Required Conditions (${condCount}):</span>
+                ${showGate ? `
+                  <span style="font-size:0.75rem; color: var(--accent-gold); font-weight:700;">Combiner Gate:</span>
+                  <select class="form-input cond-gate-select" data-sindex="${index}" data-cindex="${cIndex}">
+                    <option value="AND" ${(choice.conditionGate || 'AND') === 'AND' ? 'selected' : ''}>AND</option>
+                    <option value="OR" ${choice.conditionGate === 'OR' ? 'selected' : ''}>OR</option>
+                    <option value="NAND" ${choice.conditionGate === 'NAND' ? 'selected' : ''}>NAND</option>
+                    <option value="NOR" ${choice.conditionGate === 'NOR' ? 'selected' : ''}>NOR</option>
+                    <option value="XOR" ${choice.conditionGate === 'XOR' ? 'selected' : ''}>XOR</option>
+                    <option value="XNOR" ${choice.conditionGate === 'XNOR' ? 'selected' : ''}>XNOR</option>
+                  </select>
+                ` : ''}
               </div>
               <button class="btn btn-secondary btn-sm btn-add-cond" data-sindex="${index}" data-cindex="${cIndex}">+ Condition</button>
             </div>
             <div class="conditions-list" id="cond-list-${index}-${cIndex}"></div>
           </div>
 
-          <!-- Variable Actions Executed on Choice Selection -->
           <div class="choice-sub-editor">
             <div class="sub-editor-header">
               <span>Variable Modifiers (${choice.actions ? choice.actions.length : 0}):</span>
-              <button class="btn btn-secondary btn-sm btn-add-act" data-sindex="${index}" data-cindex="${cIndex}">+ Action</button>
+              <button class="btn btn-secondary btn-sm btn-add-act" data-sindex="${index}" data-cindex="${cIndex}">+ Modifier</button>
             </div>
             <div class="actions-list" id="act-list-${index}-${cIndex}"></div>
           </div>
@@ -444,22 +493,64 @@ class CYOACreator {
         // Render Condition Rows
         const condContainer = choiceRow.querySelector(`#cond-list-${index}-${cIndex}`);
         (choice.conditions || []).forEach((cond, condIdx) => {
+          const selectedVarObj = this.variables.find(v => v.name === cond.var) || this.variables[0] || { type: 'float' };
+          const varType = selectedVarObj.type || 'float';
+
+          let opOptions = '';
+          if (varType === 'float') {
+            opOptions = `
+              <option value="==" ${cond.op === '==' ? 'selected' : ''}>Equals (=)</option>
+              <option value="!=" ${cond.op === '!=' ? 'selected' : ''}>Does Not Equal (&ne;)</option>
+              <option value=">" ${cond.op === '>' ? 'selected' : ''}>Greater Than (&gt;)</option>
+              <option value=">=" ${cond.op === '>=' ? 'selected' : ''}>Greater Than or Equal To (&ge;)</option>
+              <option value="<" ${cond.op === '<' ? 'selected' : ''}>Less Than (&lt;)</option>
+              <option value="<=" ${cond.op === '<=' ? 'selected' : ''}>Less Than or Equal To (&le;)</option>
+            `;
+          } else {
+            opOptions = `
+              <option value="==" ${cond.op === '==' ? 'selected' : ''}>Equals (=)</option>
+              <option value="!=" ${cond.op === '!=' ? 'selected' : ''}>Does Not Equal (&ne;)</option>
+            `;
+          }
+
+          let targetSelectOptions = '';
+          const sameTypeVars = this.variables.filter(v => v.type === varType && v.name !== cond.var);
+          sameTypeVars.forEach(v => {
+            targetSelectOptions += `<option value="var:${v.name}" ${cond.targetVar === v.name ? 'selected' : ''}>Variable: ${v.name}</option>`;
+          });
+
+          if (varType === 'boolean') {
+            targetSelectOptions += `<option value="true" ${cond.value === 'true' || cond.value === true ? 'selected' : ''}>True</option>`;
+            targetSelectOptions += `<option value="false" ${cond.value === 'false' || cond.value === false ? 'selected' : ''}>False</option>`;
+          } else {
+            targetSelectOptions += `<option value="custom" ${cond.targetType === 'custom' || !cond.targetType ? 'selected' : ''}>Custom ${varType === 'float' ? 'Value' : 'Text'}</option>`;
+          }
+
+          const isCustom = cond.targetType === 'custom' || !cond.targetType;
+          let customInputHtml = '';
+          if (varType === 'float' && isCustom) {
+            customInputHtml = `<input type="number" step="any" class="form-input cond-val-input" value="${cond.value !== undefined ? cond.value : ''}" placeholder="Number" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}" style="flex:1;" />`;
+          } else if (varType === 'string' && isCustom) {
+            customInputHtml = `<input type="text" class="form-input cond-val-input" value="${cond.value !== undefined ? cond.value : ''}" placeholder="Text" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}" style="flex:1;" />`;
+          }
+
           const condRow = document.createElement('div');
           condRow.className = 'sub-rule-row';
           condRow.innerHTML = `
+            <select class="form-input cond-unary-select" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}" style="width:75px;">
+              <option value="BUFFER" ${(cond.unary || 'BUFFER') === 'BUFFER' ? 'selected' : ''}>If</option>
+              <option value="NOT" ${cond.unary === 'NOT' ? 'selected' : ''}>NOT</option>
+            </select>
             <select class="form-input cond-var-select" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}">
-              <option value="">Select Variable</option>
               ${this.variables.map(v => `<option value="${v.name}" ${cond.var === v.name ? 'selected' : ''}>${v.name} (${v.type})</option>`).join('')}
             </select>
             <select class="form-input cond-op-select" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}">
-              <option value="==" ${cond.op === '==' ? 'selected' : ''}>==</option>
-              <option value="!=" ${cond.op === '!=' ? 'selected' : ''}>!=</option>
-              <option value=">" ${cond.op === '>' ? 'selected' : ''}>&gt;</option>
-              <option value=">=" ${cond.op === '>=' ? 'selected' : ''}>&gt;=</option>
-              <option value="<" ${cond.op === '<' ? 'selected' : ''}>&lt;</option>
-              <option value="<=" ${cond.op === '<=' ? 'selected' : ''}>&lt;=</option>
+              ${opOptions}
             </select>
-            <input type="text" class="form-input cond-val-input" value="${cond.value !== undefined ? cond.value : ''}" placeholder="Value" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}" />
+            <select class="form-input cond-target-select" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}">
+              ${targetSelectOptions}
+            </select>
+            ${customInputHtml}
             <button class="btn btn-danger btn-sm btn-delete-cond" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}">&times;</button>
           `;
           condContainer.appendChild(condRow);
@@ -468,22 +559,66 @@ class CYOACreator {
         // Render Action Rows
         const actContainer = choiceRow.querySelector(`#act-list-${index}-${cIndex}`);
         (choice.actions || []).forEach((act, actIdx) => {
-          const actRow = document.createElement('div');
-          actRow.className = 'sub-rule-row';
-          actRow.innerHTML = `
-            <select class="form-input act-var-select" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}">
-              <option value="">Select Variable</option>
-              ${this.variables.map(v => `<option value="${v.name}" ${act.var === v.name ? 'selected' : ''}>${v.name} (${v.type})</option>`).join('')}
-            </select>
-            <select class="form-input act-op-select" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}">
+          const selectedVarObj = this.variables.find(v => v.name === act.var) || this.variables[0] || { type: 'float' };
+          const varType = selectedVarObj.type || 'float';
+
+          let actOpOptions = '';
+          if (varType === 'float') {
+            actOpOptions = `
               <option value="set" ${act.op === 'set' ? 'selected' : ''}>Set =</option>
               <option value="add" ${act.op === 'add' ? 'selected' : ''}>Add +</option>
               <option value="subtract" ${act.op === 'subtract' ? 'selected' : ''}>Subtract -</option>
               <option value="multiply" ${act.op === 'multiply' ? 'selected' : ''}>Multiply *</option>
               <option value="divide" ${act.op === 'divide' ? 'selected' : ''}>Divide /</option>
-              <option value="toggle" ${act.op === 'toggle' ? 'selected' : ''}>Toggle (Bool)</option>
+            `;
+          } else if (varType === 'boolean') {
+            actOpOptions = `
+              <option value="set" ${act.op === 'set' ? 'selected' : ''}>Set =</option>
+              <option value="toggle" ${act.op === 'toggle' ? 'selected' : ''}>Toggle (&not;)</option>
+            `;
+          } else {
+            actOpOptions = `<option value="set" selected>Set =</option>`;
+          }
+
+          const isToggle = act.op === 'toggle';
+          let targetSelectHtml = '';
+          let customValHtml = '';
+
+          if (!isToggle) {
+            let targetSelectOptions = '';
+            const sameTypeVars = this.variables.filter(v => v.type === varType && v.name !== act.var);
+            sameTypeVars.forEach(v => {
+              targetSelectOptions += `<option value="var:${v.name}" ${act.targetVar === v.name ? 'selected' : ''}>Variable: ${v.name}</option>`;
+            });
+
+            if (varType === 'boolean') {
+              targetSelectOptions += `<option value="true" ${act.value === 'true' || act.value === true ? 'selected' : ''}>True</option>`;
+              targetSelectOptions += `<option value="false" ${act.value === 'false' || act.value === false ? 'selected' : ''}>False</option>`;
+            } else {
+              targetSelectOptions += `<option value="custom" ${act.targetType === 'custom' || !act.targetType ? 'selected' : ''}>Custom ${varType === 'float' ? 'Value' : 'Text'}</option>`;
+            }
+
+            targetSelectHtml = `<select class="form-input act-target-select" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}">${targetSelectOptions}</select>`;
+
+            const isCustom = act.targetType === 'custom' || !act.targetType;
+            if (varType === 'float' && isCustom) {
+              customValHtml = `<input type="number" step="any" class="form-input act-val-input" value="${act.value !== undefined ? act.value : ''}" placeholder="Number" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}" style="flex:1;" />`;
+            } else if (varType === 'string' && isCustom) {
+              customValHtml = `<input type="text" class="form-input act-val-input" value="${act.value !== undefined ? act.value : ''}" placeholder="Text" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}" style="flex:1;" />`;
+            }
+          }
+
+          const actRow = document.createElement('div');
+          actRow.className = 'sub-rule-row';
+          actRow.innerHTML = `
+            <select class="form-input act-var-select" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}">
+              ${this.variables.map(v => `<option value="${v.name}" ${act.var === v.name ? 'selected' : ''}>${v.name} (${v.type})</option>`).join('')}
             </select>
-            <input type="text" class="form-input act-val-input" value="${act.value !== undefined ? act.value : ''}" placeholder="Value" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}" />
+            <select class="form-input act-op-select" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}">
+              ${actOpOptions}
+            </select>
+            ${targetSelectHtml}
+            ${customValHtml}
             <button class="btn btn-danger btn-sm btn-delete-act" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}">&times;</button>
           `;
           actContainer.appendChild(actRow);
@@ -520,25 +655,48 @@ class CYOACreator {
       };
     });
 
-    document.querySelectorAll('.scene-secondary-audio-input').forEach(el => {
+    // Secondary Sound Handlers
+    document.querySelectorAll('.btn-add-sec-sound').forEach(el => {
+      el.onclick = (e) => {
+        const sIdx = e.target.dataset.index;
+        if (!this.scenes[sIdx].secondarySounds) this.scenes[sIdx].secondarySounds = [];
+        this.scenes[sIdx].secondarySounds.push({
+          id: "sec_" + this.scenes[sIdx].secondarySounds.length,
+          audioFile: null,
+          startTime: 0,
+          volume: 1.0,
+          persist: false
+        });
+        this.renderUI();
+      };
+    });
+
+    document.querySelectorAll('.sec-audio-file-input').forEach(el => {
       el.onchange = (e) => {
         if (e.target.files.length > 0) {
-          this.scenes[e.target.dataset.index].secondaryAudioFile = e.target.files[0];
+          this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].audioFile = e.target.files[0];
           this.renderUI();
         }
       };
     });
 
-    document.querySelectorAll('.scene-sec-start-input').forEach(el => {
-      el.onchange = (e) => { this.scenes[e.target.dataset.index].secondaryStartTime = parseFloat(e.target.value) || 0; };
+    document.querySelectorAll('.sec-start-input').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].startTime = parseFloat(e.target.value) || 0; };
     });
 
-    document.querySelectorAll('.scene-sec-vol-input').forEach(el => {
-      el.onchange = (e) => { this.scenes[e.target.dataset.index].secondaryVolume = parseFloat(e.target.value) || 1.0; };
+    document.querySelectorAll('.sec-vol-input').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].volume = parseFloat(e.target.value) || 1.0; };
     });
 
-    document.querySelectorAll('.scene-sec-persist-checkbox').forEach(el => {
-      el.onchange = (e) => { this.scenes[e.target.dataset.index].secondaryPersist = e.target.checked; };
+    document.querySelectorAll('.sec-persist-input').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].persist = e.target.checked; };
+    });
+
+    document.querySelectorAll('.btn-delete-sec-sound').forEach(el => {
+      el.onclick = (e) => {
+        this.scenes[e.target.dataset.sindex].secondarySounds.splice(e.target.dataset.secindex, 1);
+        this.renderUI();
+      };
     });
 
     document.querySelectorAll('.choice-text-input').forEach(el => {
@@ -563,7 +721,7 @@ class CYOACreator {
         const s = e.target.dataset.sindex, c = e.target.dataset.cindex;
         if (!this.scenes[s].choices[c].conditions) this.scenes[s].choices[c].conditions = [];
         const firstVar = this.variables[0] ? this.variables[0].name : '';
-        this.scenes[s].choices[c].conditions.push({ var: firstVar, op: '==', value: '' });
+        this.scenes[s].choices[c].conditions.push({ unary: 'BUFFER', var: firstVar, op: '==', targetType: 'custom', value: '' });
         this.renderUI();
       };
     });
@@ -573,16 +731,39 @@ class CYOACreator {
         const s = e.target.dataset.sindex, c = e.target.dataset.cindex;
         if (!this.scenes[s].choices[c].actions) this.scenes[s].choices[c].actions = [];
         const firstVar = this.variables[0] ? this.variables[0].name : '';
-        this.scenes[s].choices[c].actions.push({ var: firstVar, op: 'set', value: '' });
+        this.scenes[s].choices[c].actions.push({ var: firstVar, op: 'set', targetType: 'custom', value: '' });
         this.renderUI();
       };
     });
 
+    document.querySelectorAll('.cond-unary-select').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].conditions[e.target.dataset.condindex].unary = e.target.value; };
+    });
     document.querySelectorAll('.cond-var-select').forEach(el => {
-      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].conditions[e.target.dataset.condindex].var = e.target.value; };
+      el.onchange = (e) => {
+        const cond = this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].conditions[e.target.dataset.condindex];
+        cond.var = e.target.value;
+        this.renderUI();
+      };
     });
     document.querySelectorAll('.cond-op-select').forEach(el => {
       el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].conditions[e.target.dataset.condindex].op = e.target.value; };
+    });
+    document.querySelectorAll('.cond-target-select').forEach(el => {
+      el.onchange = (e) => {
+        const cond = this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].conditions[e.target.dataset.condindex];
+        const val = e.target.value;
+        if (val.startsWith('var:')) {
+          cond.targetType = 'variable';
+          cond.targetVar = val.substring(4);
+        } else if (val === 'true' || val === 'false') {
+          cond.targetType = 'custom';
+          cond.value = (val === 'true');
+        } else {
+          cond.targetType = 'custom';
+        }
+        this.renderUI();
+      };
     });
     document.querySelectorAll('.cond-val-input').forEach(el => {
       el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].conditions[e.target.dataset.condindex].value = e.target.value; };
@@ -595,10 +776,34 @@ class CYOACreator {
     });
 
     document.querySelectorAll('.act-var-select').forEach(el => {
-      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].actions[e.target.dataset.actindex].var = e.target.value; };
+      el.onchange = (e) => {
+        const act = this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].actions[e.target.dataset.actindex];
+        act.var = e.target.value;
+        this.renderUI();
+      };
     });
     document.querySelectorAll('.act-op-select').forEach(el => {
-      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].actions[e.target.dataset.actindex].op = e.target.value; };
+      el.onchange = (e) => {
+        const act = this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].actions[e.target.dataset.actindex];
+        act.op = e.target.value;
+        this.renderUI();
+      };
+    });
+    document.querySelectorAll('.act-target-select').forEach(el => {
+      el.onchange = (e) => {
+        const act = this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].actions[e.target.dataset.actindex];
+        const val = e.target.value;
+        if (val.startsWith('var:')) {
+          act.targetType = 'variable';
+          act.targetVar = val.substring(4);
+        } else if (val === 'true' || val === 'false') {
+          act.targetType = 'custom';
+          act.value = (val === 'true');
+        } else {
+          act.targetType = 'custom';
+        }
+        this.renderUI();
+      };
     });
     document.querySelectorAll('.act-val-input').forEach(el => {
       el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].actions[e.target.dataset.actindex].value = e.target.value; };
@@ -651,10 +856,7 @@ class CYOACreator {
       timeoutNext: "",
       choiceOffset: 1.0,
       audioFile: null,
-      secondaryAudioFile: null,
-      secondaryStartTime: 0,
-      secondaryVolume: 1.0,
-      secondaryPersist: false,
+      secondarySounds: [],
       choices: []
     });
     this.reindexScenes();
@@ -716,20 +918,27 @@ class CYOACreator {
         audioFolder.file(scene.id + "." + ext, scene.audioFile);
       }
 
-      let secAudioPath = "";
-      if (scene.secondaryAudioFile) {
-        const ext = scene.secondaryAudioFile.name.split('.').pop();
-        secAudioPath = "audio/" + scene.id + "_sec." + ext;
-        audioFolder.file(scene.id + "_sec." + ext, scene.secondaryAudioFile);
-      }
+      const secSoundsManifest = [];
+      (scene.secondarySounds || []).forEach((sec, idx) => {
+        let secPath = "";
+        if (sec.audioFile) {
+          const ext = sec.audioFile.name.split('.').pop();
+          secPath = "audio/" + scene.id + "_sec" + idx + "." + ext;
+          audioFolder.file(scene.id + "_sec" + idx + "." + ext, sec.audioFile);
+        }
+        secSoundsManifest.push({
+          id: sec.id || ("sec_" + idx),
+          audio: secPath || undefined,
+          startTime: sec.startTime,
+          volume: sec.volume,
+          persist: sec.persist
+        });
+      });
 
       manifest.scenes[scene.id] = {
         title: scene.title,
         audio: audioPath || undefined,
-        secondaryAudio: secAudioPath || undefined,
-        secondaryStartTime: scene.secondaryStartTime,
-        secondaryVolume: scene.secondaryVolume,
-        secondaryPersist: scene.secondaryPersist,
+        secondarySounds: secSoundsManifest,
         timer: scene.timer,
         timeoutNext: scene.timeoutNext || undefined,
         choiceOffset: scene.choiceOffset,
@@ -759,12 +968,12 @@ class CYOAPlayerApp {
     this.zipArchive = null;
     this.currentSceneId = null;
     this.state = { variables: {}, history: [], visitedScenes: new Set() };
-    this.settings = { bellEnabled: true };
+    this.settings = { bellEnabled: true, flowchartLineMode: "hover" }; // 'hover' | 'all' | 'hidden'
     this.activeObjectUrls = [];
     this.bellDelayTimer = null;
     this.timedChoiceInterval = null;
     this.choicesRevealed = false;
-    this.secondaryAudioTriggered = false;
+    this.activeSecondaryAudioElements = [];
 
     try {
       this.initDOMReferences();
@@ -799,9 +1008,9 @@ class CYOAPlayerApp {
       sceneCounter: document.getElementById('scene-counter'),
       centralMediaCard: document.getElementById('central-media-card'),
       audio: document.getElementById('audio-element'),
-      secondaryAudio: document.getElementById('secondary-audio-element'),
       progressBar: document.getElementById('progress-bar'),
       progressFill: document.getElementById('progress-fill'),
+      volumeFill: document.getElementById('volume-fill'),
       timeCurrent: document.getElementById('time-current'),
       timeDuration: document.getElementById('time-duration'),
       btnPlayPause: document.getElementById('btn-play-pause'),
@@ -841,6 +1050,7 @@ class CYOAPlayerApp {
       modalFlowchart: document.getElementById('modal-flowchart'),
       btnCloseFlowchart: document.getElementById('btn-close-flowchart'),
       flowchartContent: document.getElementById('flowchart-content'),
+      btnToggleFlowchartLines: document.getElementById('btn-toggle-flowchart-lines'),
       toastContainer: document.getElementById('toast-container')
     };
   }
@@ -904,6 +1114,17 @@ class CYOAPlayerApp {
       this.dom.btnCloseFlowchart.onclick = () => this.dom.modalFlowchart.classList.add('hidden');
     }
 
+    if (this.dom.btnToggleFlowchartLines) {
+      this.dom.btnToggleFlowchartLines.onclick = () => {
+        if (this.settings.flowchartLineMode === 'hover') this.settings.flowchartLineMode = 'all';
+        else if (this.settings.flowchartLineMode === 'all') this.settings.flowchartLineMode = 'hidden';
+        else this.settings.flowchartLineMode = 'hover';
+
+        this.dom.btnToggleFlowchartLines.textContent = "Lines: " + this.settings.flowchartLineMode.toUpperCase();
+        this.renderFlowchart();
+      };
+    }
+
     if (this.dom.btnCloseCreator) this.dom.btnCloseCreator.onclick = () => this.dom.modalCreator.classList.add('hidden');
     if (this.dom.btnAddVariable) this.dom.btnAddVariable.onclick = () => this.creator.addVariable();
     if (this.dom.btnAddScene) this.dom.btnAddScene.onclick = () => this.creator.addScene();
@@ -938,9 +1159,9 @@ class CYOAPlayerApp {
         this.updateStatusTag('Playing', 'status-playing');
         if (this.dom.iconPlay) this.dom.iconPlay.classList.add('hidden');
         if (this.dom.iconPause) this.dom.iconPause.classList.remove('hidden');
-        if (this.dom.secondaryAudio && this.secondaryAudioTriggered) {
-          this.dom.secondaryAudio.play().catch(() => {});
-        }
+        this.activeSecondaryAudioElements.forEach(item => {
+          if (item.triggered && item.audioEl) item.audioEl.play().catch(() => {});
+        });
       };
       this.dom.audio.onpause = () => {
         if (!this.dom.audio.ended) {
@@ -948,9 +1169,9 @@ class CYOAPlayerApp {
         }
         if (this.dom.iconPlay) this.dom.iconPlay.classList.remove('hidden');
         if (this.dom.iconPause) this.dom.iconPause.classList.add('hidden');
-        if (this.dom.secondaryAudio) {
-          this.dom.secondaryAudio.pause();
-        }
+        this.activeSecondaryAudioElements.forEach(item => {
+          if (item.audioEl) item.audioEl.pause();
+        });
       };
     }
 
@@ -974,7 +1195,9 @@ class CYOAPlayerApp {
       this.dom.selectSpeed.onchange = (e) => {
         const rate = parseFloat(e.target.value);
         if (this.dom.audio) this.dom.audio.playbackRate = rate;
-        if (this.dom.secondaryAudio) this.dom.secondaryAudio.playbackRate = rate;
+        this.activeSecondaryAudioElements.forEach(item => {
+          if (item.audioEl) item.audioEl.playbackRate = rate;
+        });
       };
     }
 
@@ -985,11 +1208,8 @@ class CYOAPlayerApp {
           this.dom.audio.volume = val;
           this.dom.audio.muted = (val === 0);
         }
-        if (this.dom.secondaryAudio) {
-          const scene = this.storyData && this.storyData.scenes && this.storyData.scenes[this.currentSceneId];
-          const relVol = (scene && typeof scene.secondaryVolume === 'number') ? scene.secondaryVolume : 1.0;
-          this.dom.secondaryAudio.volume = Math.max(0, Math.min(1, val * relVol));
-        }
+        this.syncSecondaryVolumes();
+        this.updateVolumeProgress(val);
         this.updateVolumeIcons(val === 0);
       };
     }
@@ -998,6 +1218,9 @@ class CYOAPlayerApp {
       this.dom.btnMute.onclick = () => {
         if (this.dom.audio) {
           this.dom.audio.muted = !this.dom.audio.muted;
+          const currentVal = this.dom.audio.muted ? 0 : (this.dom.audio.volume || 1);
+          this.syncSecondaryVolumes();
+          this.updateVolumeProgress(currentVal);
           this.updateVolumeIcons(this.dom.audio.muted);
         }
       };
@@ -1007,6 +1230,13 @@ class CYOAPlayerApp {
     if (this.dom.btnLoadAnother) this.dom.btnLoadAnother.onclick = () => triggerFileSelect();
 
     window.onkeydown = (e) => this.handleGlobalKeyDown(e);
+  }
+
+  updateVolumeProgress(val) {
+    if (this.dom.volumeFill) {
+      const pct = Math.max(0, Math.min(100, val * 100));
+      this.dom.volumeFill.style.width = pct + "%";
+    }
   }
 
   // --- VARIABLE ENGINE HELPER METHODS ---
@@ -1027,26 +1257,40 @@ class CYOAPlayerApp {
 
   evalCondition(cond, variables) {
     if (!cond || !cond.var || !(cond.var in variables)) return true;
-    const curVal = variables[cond.var];
-    let targetVal = cond.value;
+    const leftVal = variables[cond.var];
+    let rightVal;
 
-    if (typeof curVal === 'number') targetVal = parseFloat(targetVal) || 0;
-    if (typeof curVal === 'boolean') {
-      targetVal = (String(targetVal).toLowerCase() === 'true' || targetVal === true);
+    if (cond.targetType === 'variable') {
+      rightVal = variables[cond.targetVar];
+    } else {
+      rightVal = cond.value;
     }
 
+    if (typeof leftVal === 'number') {
+      rightVal = parseFloat(rightVal) || 0;
+    } else if (typeof leftVal === 'boolean') {
+      rightVal = (String(rightVal).toLowerCase() === 'true' || rightVal === true);
+    } else {
+      rightVal = String(rightVal !== undefined ? rightVal : '');
+    }
+
+    let result = false;
     switch (cond.op) {
-      case '==': return curVal == targetVal;
-      case '!=': return curVal != targetVal;
-      case '>':  return curVal > targetVal;
-      case '>=': return curVal >= targetVal;
-      case '<':  return curVal < targetVal;
-      case '<=': return curVal <= targetVal;
-      default:   return true;
+      case '==': result = (leftVal == rightVal); break;
+      case '!=': result = (leftVal != rightVal); break;
+      case '>':  result = (leftVal > rightVal); break;
+      case '>=': result = (leftVal >= rightVal); break;
+      case '<':  result = (leftVal < rightVal); break;
+      case '<=': result = (leftVal <= rightVal); break;
+      default:   result = true; break;
     }
+
+    if (cond.unary === 'NOT') {
+      result = !result;
+    }
+    return result;
   }
 
-  // Support Logic Gates: AND, NAND, OR, NOR, XOR, XNOR, NOT
   evalConditionsWithGate(conditions, gate, variables) {
     if (!conditions || !Array.isArray(conditions) || conditions.length === 0) return true;
     const results = conditions.map(c => this.evalCondition(c, variables));
@@ -1059,7 +1303,6 @@ class CYOAPlayerApp {
       case 'NOR':  return !results.some(Boolean);
       case 'XOR':  return results.filter(Boolean).length % 2 === 1;
       case 'XNOR': return results.filter(Boolean).length % 2 === 0;
-      case 'NOT':  return !results[0];
       default:     return results.every(Boolean);
     }
   }
@@ -1067,17 +1310,26 @@ class CYOAPlayerApp {
   applyAction(action, variables) {
     if (!action || !action.var || !(action.var in variables)) return;
     const varName = action.var;
-    let val = action.value;
     const curType = typeof variables[varName];
 
     if (curType === 'boolean') {
       if (action.op === 'toggle') {
         variables[varName] = !variables[varName];
-      } else {
-        variables[varName] = (String(val).toLowerCase() === 'true' || val === true);
+        return;
       }
+    }
+
+    let sourceVal;
+    if (action.targetType === 'variable') {
+      sourceVal = variables[action.targetVar];
+    } else {
+      sourceVal = action.value;
+    }
+
+    if (curType === 'boolean') {
+      variables[varName] = (String(sourceVal).toLowerCase() === 'true' || sourceVal === true);
     } else if (curType === 'number') {
-      const num = parseFloat(val) || 0;
+      const num = parseFloat(sourceVal) || 0;
       switch (action.op) {
         case 'set': variables[varName] = num; break;
         case 'add': variables[varName] += num; break;
@@ -1086,7 +1338,7 @@ class CYOAPlayerApp {
         case 'divide': if (num !== 0) variables[varName] /= num; break;
       }
     } else {
-      variables[varName] = String(val);
+      variables[varName] = String(sourceVal !== undefined ? sourceVal : '');
     }
   }
 
@@ -1095,7 +1347,7 @@ class CYOAPlayerApp {
     actions.forEach(a => this.applyAction(a, variables));
   }
 
-  // --- FLOWCHART MODAL METHODS WITH FULL OVERVIEW ---
+  // --- FLOWCHART MODAL METHODS WITH OVERVIEW & HOVER HIGHLIGHTING ---
   openFlowchartModal() {
     if (!this.storyData) return;
     this.renderFlowchart();
@@ -1108,7 +1360,6 @@ class CYOAPlayerApp {
 
     container.innerHTML = '';
 
-    // Variables Legend Header
     const varsLegend = document.createElement('div');
     varsLegend.className = 'flowchart-vars-legend';
     const varList = (this.storyData.variables || []).map(v => `<span class="var-legend-pill"><strong>${v.name}</strong> (${v.type}): <em>${this.state.variables[v.name] !== undefined ? this.state.variables[v.name] : v.default}</em></span>`).join('');
@@ -1188,20 +1439,20 @@ class CYOAPlayerApp {
         card.className = `flowchart-node-card ${isStart ? 'node-start' : ''} ${isCurrent ? 'node-current' : ''}`;
         card.dataset.sceneId = sceneId;
 
-        // Render Secondary Sound Badge if present
         let secAudioBadge = '';
-        if (sc.secondaryAudio) {
-          secAudioBadge = `<div class="flowchart-sec-badge">🎵 Overlaid Sound @ ${sc.secondaryStartTime || 0}s (vol: ${sc.secondaryVolume || 1.0}) ${sc.secondaryPersist ? '• Persists' : ''}</div>`;
+        const secSounds = sc.secondarySounds || (sc.secondaryAudio ? [{ audio: sc.secondaryAudio, startTime: sc.secondaryStartTime, volume: sc.secondaryVolume, persist: sc.secondaryPersist }] : []);
+        if (secSounds.length > 0) {
+          secAudioBadge = `<div class="flowchart-sec-badge">🎵 Overlaid Sounds (${secSounds.length})</div>`;
         }
 
         let choicesHtml = '';
         if (sc.choices && sc.choices.length > 0) {
           choicesHtml = sc.choices.map((c, idx) => {
-            let condText = (c.conditions && c.conditions.length > 0) ? `<div class="flowchart-cond-pill">🔒 Gate [${c.conditionGate || 'AND'}]: ${c.conditions.map(cd => `${cd.var} ${cd.op} ${cd.value}`).join(' & ')}</div>` : '';
-            let actText = (c.actions && c.actions.length > 0) ? `<div class="flowchart-act-pill">⚡ ${c.actions.map(a => `${a.var} ${a.op} ${a.value}`).join(', ')}</div>` : '';
+            let condText = (c.conditions && c.conditions.length > 0) ? `<div class="flowchart-cond-pill">🔒 Gate [${c.conditionGate || 'AND'}]: ${c.conditions.map(cd => `${cd.unary === 'NOT' ? 'NOT ' : ''}${cd.var} ${cd.op} ${cd.targetType === 'variable' ? cd.targetVar : cd.value}`).join(' & ')}</div>` : '';
+            let actText = (c.actions && c.actions.length > 0) ? `<div class="flowchart-act-pill">⚡ ${c.actions.map(a => `${a.var} ${a.op} ${a.targetType === 'variable' ? a.targetVar : a.value}`).join(', ')}</div>` : '';
 
             return `
-              <div class="flowchart-choice-item" data-target="${c.next || ''}">
+              <div class="flowchart-choice-item" data-from="${sceneId}" data-target="${c.next || ''}">
                 <div class="choice-main-line">
                   <span class="choice-num">${idx + 1}</span>
                   <span class="choice-label">${c.text}</span>
@@ -1255,11 +1506,17 @@ class CYOAPlayerApp {
     svg.setAttribute('width', wrapper.scrollWidth);
     svg.setAttribute('height', wrapper.scrollHeight);
 
+    // Clear old lines
+    svg.querySelectorAll('.flowchart-connection-line').forEach(l => l.remove());
+
+    if (this.settings.flowchartLineMode === 'hidden') return;
+
     const sceneCards = wrapper.querySelectorAll('.flowchart-node-card');
     const cardMap = {};
     sceneCards.forEach(c => cardMap[c.dataset.sceneId] = c);
 
     sceneCards.forEach(card => {
+      const fromId = card.dataset.sceneId;
       const choiceItems = card.querySelectorAll('.flowchart-choice-item');
 
       choiceItems.forEach(item => {
@@ -1281,10 +1538,49 @@ class CYOAPlayerApp {
           
           path.setAttribute('d', d);
           path.setAttribute('class', 'flowchart-connection-line');
+          path.setAttribute('data-from', fromId);
+          path.setAttribute('data-to', toId);
           path.setAttribute('marker-end', 'url(#flowchart-arrow)');
+
+          if (this.settings.flowchartLineMode === 'hover') {
+            path.style.display = 'none';
+          }
+
           svg.appendChild(path);
+
+          // Bind hover events on choice item to highlight its line
+          item.onmouseenter = () => {
+            path.style.display = 'block';
+            path.classList.add('line-highlight');
+          };
+          item.onmouseleave = () => {
+            if (this.settings.flowchartLineMode === 'hover') {
+              path.style.display = 'none';
+            }
+            path.classList.remove('line-highlight');
+          };
         }
       });
+
+      // Bind hover event on entire scene card to highlight outgoing lines
+      card.onmouseenter = () => {
+        svg.querySelectorAll(`path[data-from="${fromId}"]`).forEach(p => {
+          p.style.display = 'block';
+          p.classList.add('line-highlight');
+        });
+      };
+      card.onmouseleave = () => {
+        if (this.settings.flowchartLineMode === 'hover') {
+          svg.querySelectorAll(`path[data-from="${fromId}"]`).forEach(p => {
+            p.style.display = 'none';
+            p.classList.remove('line-highlight');
+          });
+        } else {
+          svg.querySelectorAll(`path[data-from="${fromId}"]`).forEach(p => {
+            p.classList.remove('line-highlight');
+          });
+        }
+      };
     });
   }
 
@@ -1340,31 +1636,49 @@ class CYOAPlayerApp {
     return { timer, choiceOffset };
   }
 
-  // ACCURATE SECONDARY AUDIO SYNC & SEEKING ENGINE
+  // ACCURATE MULTI-TRACK SECONDARY AUDIO SYNC & SEEKING ENGINE
   syncSecondaryAudio() {
-    if (!this.dom.audio || !this.dom.secondaryAudio || !this.dom.secondaryAudio.src) return;
+    if (!this.dom.audio || this.activeSecondaryAudioElements.length === 0) return;
     const scene = this.storyData && this.storyData.scenes && this.storyData.scenes[this.currentSceneId];
-    if (!scene || !scene.secondaryAudio) return;
+    if (!scene) return;
 
     const mainCurTime = this.dom.audio.currentTime || 0;
-    const startTs = typeof scene.secondaryStartTime === 'number' ? scene.secondaryStartTime : 0;
-    const relativeOffset = mainCurTime - startTs;
 
-    const secDuration = this.dom.secondaryAudio.duration || 999999;
+    this.activeSecondaryAudioElements.forEach(item => {
+      if (!item.audioEl || !item.audioEl.src) return;
+      const startTs = item.startTime || 0;
+      const offset = mainCurTime - startTs;
+      const duration = item.audioEl.duration || 999999;
 
-    if (relativeOffset >= 0 && relativeOffset < secDuration) {
-      if (Math.abs(this.dom.secondaryAudio.currentTime - relativeOffset) > 0.3) {
-        this.dom.secondaryAudio.currentTime = relativeOffset;
+      if (offset >= 0 && offset < duration) {
+        // Check secondary sound conditions
+        if (this.evalConditionsWithGate(item.conditions, item.conditionGate, this.state.variables)) {
+          if (Math.abs(item.audioEl.currentTime - offset) > 0.3) {
+            item.audioEl.currentTime = offset;
+          }
+          if (!this.dom.audio.paused && item.audioEl.paused) {
+            item.audioEl.play().catch(() => {});
+          }
+          item.triggered = true;
+        } else {
+          item.audioEl.pause();
+        }
+      } else {
+        if (!item.audioEl.paused) {
+          item.audioEl.pause();
+        }
       }
-      if (!this.dom.audio.paused && this.dom.secondaryAudio.paused) {
-        this.dom.secondaryAudio.play().catch(() => {});
+    });
+  }
+
+  syncSecondaryVolumes() {
+    const mainVol = this.dom.audio ? (this.dom.audio.muted ? 0 : this.dom.audio.volume) : 1;
+    this.activeSecondaryAudioElements.forEach(item => {
+      if (item.audioEl) {
+        const relVol = typeof item.relativeVolume === 'number' ? item.relativeVolume : 1.0;
+        item.audioEl.volume = Math.max(0, Math.min(1, mainVol * relVol));
       }
-      this.secondaryAudioTriggered = true;
-    } else {
-      if (!this.dom.secondaryAudio.paused) {
-        this.dom.secondaryAudio.pause();
-      }
-    }
+    });
   }
 
   handleAudioTimeUpdate() {
@@ -1459,12 +1773,8 @@ class CYOAPlayerApp {
       return;
     }
 
-    const prevScene = this.storyData.scenes[this.currentSceneId];
-    const isSecondaryPersisting = prevScene && prevScene.secondaryPersist && this.dom.secondaryAudio && !this.dom.secondaryAudio.paused;
-
     this.currentSceneId = sceneId;
     this.choicesRevealed = false;
-    this.secondaryAudioTriggered = false;
     this.state.visitedScenes.add(sceneId);
 
     if (!isBackNav) {
@@ -1476,23 +1786,44 @@ class CYOAPlayerApp {
     this.clearTimers();
     if (this.dom.choiceContainer) this.dom.choiceContainer.classList.add('hidden');
 
-    if (!isSecondaryPersisting && this.dom.secondaryAudio) {
-      this.dom.secondaryAudio.pause();
-      this.dom.secondaryAudio.src = '';
-    }
+    // Clean non-persisting secondary audio tracks
+    const remainingSecAudio = [];
+    this.activeSecondaryAudioElements.forEach(item => {
+      if (item.persist && item.audioEl && !item.audioEl.paused) {
+        remainingSecAudio.push(item);
+      } else if (item.audioEl) {
+        item.audioEl.pause();
+        item.audioEl.src = '';
+      }
+    });
+    this.activeSecondaryAudioElements = remainingSecAudio;
 
     if (this.dom.sceneCounter) this.dom.sceneCounter.textContent = "Scene: " + (scene.title || sceneId);
 
     this.updateMediaCardVisibility();
 
-    // Prepare Secondary Audio if present and not already persisting
-    if (scene.secondaryAudio && this.dom.secondaryAudio && !isSecondaryPersisting) {
-      const sfxUrl = await CYOAParser.extractAudioBlobUrl(this.zipArchive, scene.secondaryAudio);
-      if (sfxUrl) {
-        this.activeObjectUrls.push(sfxUrl);
-        this.dom.secondaryAudio.src = sfxUrl;
-        const vol = typeof scene.secondaryVolume === 'number' ? scene.secondaryVolume : 1.0;
-        this.dom.secondaryAudio.volume = Math.max(0, Math.min(1, vol * (this.dom.audio ? this.dom.audio.volume : 1)));
+    // Prepare Scene's Secondary Audio Tracks
+    const secSounds = scene.secondarySounds || (scene.secondaryAudio ? [{ audio: scene.secondaryAudio, startTime: scene.secondaryStartTime, volume: scene.secondaryVolume, persist: scene.secondaryPersist }] : []);
+    for (let sec of secSounds) {
+      if (sec.audio) {
+        const sfxUrl = await CYOAParser.extractAudioBlobUrl(this.zipArchive, sec.audio);
+        if (sfxUrl) {
+          this.activeObjectUrls.push(sfxUrl);
+          const audioEl = new Audio(sfxUrl);
+          const mainVol = this.dom.audio ? (this.dom.audio.muted ? 0 : this.dom.audio.volume) : 1;
+          const relVol = typeof sec.volume === 'number' ? sec.volume : 1.0;
+          audioEl.volume = Math.max(0, Math.min(1, mainVol * relVol));
+
+          this.activeSecondaryAudioElements.push({
+            audioEl,
+            startTime: sec.startTime || 0,
+            relativeVolume: relVol,
+            persist: Boolean(sec.persist),
+            conditionGate: sec.conditionGate || "AND",
+            conditions: sec.conditions || [],
+            triggered: false
+          });
+        }
       }
     }
 
@@ -1740,10 +2071,13 @@ class CYOAPlayerApp {
       this.dom.audio.pause();
       this.dom.audio.src = '';
     }
-    if (this.dom.secondaryAudio) {
-      this.dom.secondaryAudio.pause();
-      this.dom.secondaryAudio.src = '';
-    }
+    this.activeSecondaryAudioElements.forEach(item => {
+      if (item.audioEl) {
+        item.audioEl.pause();
+        item.audioEl.src = '';
+      }
+    });
+    this.activeSecondaryAudioElements = [];
     this.activeObjectUrls.forEach(url => URL.revokeObjectURL(url));
     this.activeObjectUrls = [];
     this.state = { variables: {}, history: [], visitedScenes: new Set() };
