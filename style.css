@@ -205,7 +205,7 @@ body {
 
 .story-description { color: var(--text-secondary); font-size: 0.9rem; }
 
-/* Story Tags without floating raw commas */
+/* Story Tags */
 .story-tags { margin-top: 0.85rem; font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
 .tags-label { font-weight: 600; color: var(--text-muted); margin-right: 0.2rem; }
 .story-tag-badge { background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); color: #a78bfa; padding: 0.2rem 0.6rem; border-radius: var(--radius-sm); font-size: 0.8rem; font-weight: 500; display: inline-block; }
@@ -246,7 +246,7 @@ body {
 .audio-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent-gold); box-shadow: 0 0 10px rgba(245, 158, 11, 0.5); cursor: pointer; }
 .slider-fill { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 6px; background: var(--accent-gold); border-radius: var(--radius-full); pointer-events: none; z-index: 1; }
 
-/* Control Rows */
+/* Symmetrical Control Rows */
 .playback-controls-row {
   display: flex;
   align-items: center;
@@ -683,13 +683,13 @@ body {
   margin-bottom: 0.45rem;
   align-items: center;
   width: 100%;
-  flex-wrap: wrap; /* Prevents overflow past right card border */
+  flex-wrap: wrap; /* Flex wrap guarantees elements stay inside card boundary */
 }
 
 .sub-rule-row .form-input {
   padding: 0.35rem 0.5rem;
   font-size: 0.825rem;
-  min-width: 0; /* Critical flex overflow fix */
+  min-width: 0; /* Prevents input overflow */
 }
 
 .rule-id-tag {
