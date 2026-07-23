@@ -119,6 +119,7 @@ class CYOAParser {
     if (!storyData.title) storyData.title = "Untitled CYOA Story";
     if (!storyData.scriptWriter) storyData.scriptWriter = storyData.author || "Unknown Writer";
     if (!storyData.scriptFiller) storyData.scriptFiller = "Unknown Filler";
+    if (!storyData.tags) storyData.tags = [];
     if (!storyData.scenes || typeof storyData.scenes !== 'object') {
       throw new Error("Invalid story structure: 'scenes' object is missing.");
     }
@@ -378,14 +379,29 @@ class CYOACreator {
     }
 
     const title = document.getElementById('create-title').value.trim() || "My Story";
-    const scriptWriter = document.getElementById('create-script-writer').value.trim() || "Unknown Writer";
-    const scriptFiller = document.getElementById('create-script-filler').value.trim() || "Unknown Filler";
+    const scriptWriter = document.getElementById('create-script-writer').value.trim();
+    const scriptFiller = document.getElementById('create-script-filler').value.trim();
     const description = document.getElementById('create-description').value.trim();
+    const rawTags = document.getElementById('create-tags').value.trim();
+
+    if (!scriptWriter) {
+      this.app.showToast("Script Writer is a required field.", "error");
+      document.getElementById('create-script-writer').focus();
+      return;
+    }
+
+    if (!scriptFiller) {
+      this.app.showToast("Script Filler is a required field.", "error");
+      document.getElementById('create-script-filler').focus();
+      return;
+    }
 
     if (this.scenes.length === 0) {
       alert("Please add at least one scene to your story.");
       return;
     }
+
+    const tags = rawTags ? rawTags.split(',').map(t => t.trim()).filter(Boolean) : [];
 
     this.reindexScenes();
 
@@ -395,6 +411,7 @@ class CYOACreator {
       scriptWriter,
       scriptFiller,
       description,
+      tags,
       start: this.scenes[0].id,
       scenes: {}
     };
@@ -441,6 +458,7 @@ class CYOAPlayerApp {
     this.zipArchive = null;
     this.currentSceneId = null;
     this.state = { variables: {}, history: [], visitedScenes: new Set() };
+    this.settings = { bellEnabled: true };
     this.activeObjectUrls = [];
     this.bellDelayTimer = null;
     this.timedChoiceInterval = null;
@@ -469,6 +487,7 @@ class CYOAPlayerApp {
       storyWriter: document.getElementById('story-writer'),
       storyFiller: document.getElementById('story-filler'),
       storyDescription: document.getElementById('story-description'),
+      storyTags: document.getElementById('story-tags'),
       statusTag: document.getElementById('story-status-tag'),
       sceneCounter: document.getElementById('scene-counter'),
       sceneImgContainer: document.getElementById('scene-image-container'),
@@ -482,9 +501,13 @@ class CYOAPlayerApp {
       btnPlayPause: document.getElementById('btn-play-pause'),
       iconPlay: document.getElementById('icon-play'),
       iconPause: document.getElementById('icon-pause'),
+      btnPrevScene: document.getElementById('btn-prev-scene'),
       btnSkipBack: document.getElementById('btn-skip-back'),
       btnSkipForward: document.getElementById('btn-skip-forward'),
       btnRestartScene: document.getElementById('btn-restart-scene'),
+      btnToggleBell: document.getElementById('btn-toggle-bell'),
+      iconBellOn: document.getElementById('icon-bell-on'),
+      iconBellOff: document.getElementById('icon-bell-off'),
       selectSpeed: document.getElementById('select-speed'),
       btnMute: document.getElementById('btn-mute'),
       iconVolumeHigh: document.getElementById('icon-volume-high'),
@@ -553,9 +576,11 @@ class CYOAPlayerApp {
     }
 
     if (this.dom.btnPlayPause) this.dom.btnPlayPause.onclick = () => this.togglePlayPause();
+    if (this.dom.btnPrevScene) this.dom.btnPrevScene.onclick = () => this.goBack();
     if (this.dom.btnSkipBack) this.dom.btnSkipBack.onclick = () => this.seekRelative(-10);
     if (this.dom.btnSkipForward) this.dom.btnSkipForward.onclick = () => this.seekRelative(10);
     if (this.dom.btnRestartScene) this.dom.btnRestartScene.onclick = () => this.restartCurrentScene();
+    if (this.dom.btnToggleBell) this.dom.btnToggleBell.onclick = () => this.toggleBellSetting();
 
     if (this.dom.progressBar) {
       this.dom.progressBar.oninput = (e) => {
@@ -630,7 +655,9 @@ class CYOAPlayerApp {
 
     if (choiceOffset < 0 && dur > 0 && cur >= (dur + choiceOffset)) {
       this.choicesRevealed = true;
-      this.soundEngine.playChurchBell();
+      if (this.settings.bellEnabled) {
+        this.soundEngine.playChurchBell();
+      }
       this.revealChoices();
     }
   }
@@ -647,10 +674,27 @@ class CYOAPlayerApp {
     this.bellDelayTimer = setTimeout(() => {
       if (!this.choicesRevealed) {
         this.choicesRevealed = true;
-        this.soundEngine.playChurchBell();
+        if (this.settings.bellEnabled) {
+          this.soundEngine.playChurchBell();
+        }
         this.revealChoices();
       }
     }, delayMs);
+  }
+
+  toggleBellSetting() {
+    this.settings.bellEnabled = !this.settings.bellEnabled;
+    if (this.dom.iconBellOn && this.dom.iconBellOff) {
+      if (this.settings.bellEnabled) {
+        this.dom.iconBellOn.classList.remove('hidden');
+        this.dom.iconBellOff.classList.add('hidden');
+        this.showToast("Decision chime sound enabled.", "info");
+      } else {
+        this.dom.iconBellOn.classList.add('hidden');
+        this.dom.iconBellOff.classList.remove('hidden');
+        this.showToast("Decision chime sound disabled.", "info");
+      }
+    }
   }
 
   async loadCyoaFile(file) {
@@ -673,7 +717,7 @@ class CYOAPlayerApp {
     }
   }
 
-  async loadScene(sceneId) {
+  async loadScene(sceneId, isBackNav = false) {
     const scene = this.storyData.scenes[sceneId];
     if (!scene) {
       this.showToast("Error: Scene " + sceneId + " not found.", 'error');
@@ -683,7 +727,12 @@ class CYOAPlayerApp {
     this.currentSceneId = sceneId;
     this.choicesRevealed = false;
     this.state.visitedScenes.add(sceneId);
-    this.state.history.push(sceneId);
+
+    if (!isBackNav) {
+      if (this.state.history[this.state.history.length - 1] !== sceneId) {
+        this.state.history.push(sceneId);
+      }
+    }
 
     this.clearTimers();
     if (this.dom.choiceContainer) this.dom.choiceContainer.classList.add('hidden');
@@ -724,6 +773,17 @@ class CYOAPlayerApp {
       }
     } else {
       this.handleAudioEnded();
+    }
+  }
+
+  goBack() {
+    if (this.state.history.length > 1) {
+      this.state.history.pop(); // Remove current scene
+      const prevSceneId = this.state.history[this.state.history.length - 1];
+      this.showToast("Returned to previous scene.", "info");
+      this.loadScene(prevSceneId, true);
+    } else {
+      this.showToast("Already at the beginning of the story.", "info");
     }
   }
 
@@ -823,10 +883,11 @@ class CYOAPlayerApp {
   }
 
   restartCurrentScene() {
-    if (this.currentSceneId) this.loadScene(this.currentSceneId);
+    if (this.currentSceneId) this.loadScene(this.currentSceneId, true);
   }
 
   restartStory() {
+    this.state.history = [];
     if (this.storyData && this.storyData.start) this.loadScene(this.storyData.start);
   }
 
@@ -869,6 +930,24 @@ class CYOAPlayerApp {
     if (this.dom.storyWriter) this.dom.storyWriter.textContent = "Writer: " + (this.storyData.scriptWriter || 'Unknown Writer');
     if (this.dom.storyFiller) this.dom.storyFiller.textContent = "Filler: " + (this.storyData.scriptFiller || 'Unknown Filler');
     if (this.dom.storyDescription) this.dom.storyDescription.textContent = this.storyData.description || 'No description available.';
+
+    if (this.dom.storyTags) {
+      let tagsList = [];
+      if (Array.isArray(this.storyData.tags)) {
+        tagsList = this.storyData.tags;
+      } else if (typeof this.storyData.tags === 'string' && this.storyData.tags.trim()) {
+        tagsList = this.storyData.tags.split(',').map(t => t.trim()).filter(Boolean);
+      }
+
+      if (tagsList.length > 0) {
+        this.dom.storyTags.innerHTML = '<span class="tags-label">Tags:</span> ' + 
+          tagsList.map(tag => `<span class="story-tag-badge">${tag}</span>`).join(', ');
+        this.dom.storyTags.classList.remove('hidden');
+      } else {
+        this.dom.storyTags.classList.add('hidden');
+        this.dom.storyTags.innerHTML = '';
+      }
+    }
   }
 
   clearTimers() {
@@ -911,6 +990,8 @@ class CYOAPlayerApp {
     } else if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'L') {
       e.preventDefault();
       this.seekRelative(10);
+    } else if (e.key === 'b' || e.key === 'B') {
+      this.goBack();
     } else if (e.key === 'm' || e.key === 'M') {
       if (this.dom.btnMute) this.dom.btnMute.click();
     } else if (e.key === 'r' || e.key === 'R') {
