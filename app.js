@@ -212,7 +212,7 @@ class CYOACreator {
     });
   }
   
-renderUI() {
+  renderUI() {
     const container = document.getElementById('creator-scenes-container');
     if (!container) return;
 
@@ -232,6 +232,10 @@ renderUI() {
           <div class="form-group full-width">
             <label>Scene Title:</label>
             <input type="text" class="form-input scene-title-input" value="${scene.title}" data-index="${index}" placeholder="Scene Title" />
+          </div>
+          <div class="form-group full-width">
+            <label>Transcript / Text:</label>
+            <textarea class="form-input scene-transcript-input" data-index="${index}" placeholder="Narration transcript">${scene.transcript || ''}</textarea>
           </div>
           <div class="form-group full-width">
             <label>Audio File (.mp3, .wav, .m4a):</label>
@@ -296,35 +300,11 @@ renderUI() {
     this.bindEvents();
   }
 
-      container.appendChild(card);
-
-      // Render Choice Rows
-      const choicesContainer = card.querySelector(`#choices-list-edit-${index}`);
-      scene.choices.forEach((choice, cIndex) => {
-        const choiceRow = document.createElement('div');
-        choiceRow.className = 'choice-edit-row';
-        choiceRow.innerHTML = `
-          <input type="text" class="form-input choice-text-input" placeholder="Choice Text" value="${choice.text}" data-sindex="${index}" data-cindex="${cIndex}" style="flex:2;" />
-          <select class="form-input choice-next-select" data-sindex="${index}" data-cindex="${cIndex}" style="flex:1.5;">
-            <option value="">-- Target Scene --</option>
-            ${this.scenes.map((s, sIdx) => 
-              `<option value="${s.id}" ${choice.next === s.id ? 'selected' : ''}>Scene ${sIdx + 1}: ${s.title || 'Untitled'}</option>`
-            ).join('')}
-          </select>
-          <button class="btn btn-danger btn-sm btn-delete-choice" data-sindex="${index}" data-cindex="${cIndex}">&times;</button>
-        `;
-        choicesContainer.appendChild(choiceRow);
-      });
-    });
-
-    this.bindEvents();
-  }
-
   bindEvents() {
     document.querySelectorAll('.scene-title-input').forEach(el => {
       el.onchange = (e) => {
         this.scenes[e.target.dataset.index].title = e.target.value;
-        this.renderUI(); // Re-render to update titles in choice dropdowns
+        this.renderUI();
       };
     });
     document.querySelectorAll('.scene-transcript-input').forEach(el => {
@@ -362,7 +342,7 @@ renderUI() {
 
     document.querySelectorAll('.btn-add-choice').forEach(el => {
       el.onclick = (e) => {
-        const sIndex = e.target.dataset.index;
+        const sIndex = parseInt(e.target.dataset.index, 10);
         const targetScene = this.scenes[sIndex + 1] ? this.scenes[sIndex + 1].id : (this.scenes[0] ? this.scenes[0].id : "");
         this.scenes[sIndex].choices.push({ text: "New Option", next: targetScene });
         this.renderUI();
