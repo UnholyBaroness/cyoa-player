@@ -205,7 +205,7 @@ body {
 
 .story-description { color: var(--text-secondary); font-size: 0.9rem; }
 
-/* Story Tags without floating raw commas */
+/* Story Tags */
 .story-tags { margin-top: 0.85rem; font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
 .tags-label { font-weight: 600; color: var(--text-muted); margin-right: 0.2rem; }
 .story-tag-badge { background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); color: #a78bfa; padding: 0.2rem 0.6rem; border-radius: var(--radius-sm); font-size: 0.8rem; font-weight: 500; display: inline-block; }
@@ -246,7 +246,7 @@ body {
 .audio-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent-gold); box-shadow: 0 0 10px rgba(245, 158, 11, 0.5); cursor: pointer; }
 .slider-fill { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 6px; background: var(--accent-gold); border-radius: var(--radius-full); pointer-events: none; z-index: 1; }
 
-/* Control Rows */
+/* Symmetrical Control Rows */
 .playback-controls-row {
   display: flex;
   align-items: center;
@@ -262,6 +262,16 @@ body {
   border-top: 1px solid var(--border-subtle);
   padding-top: 1rem;
 }
+
+.utility-left, .utility-center, .utility-right {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.utility-left { justify-content: flex-start; }
+.utility-center { justify-content: center; }
+.utility-right { justify-content: flex-end; }
 
 .btn-control-secondary { 
   background: rgba(255, 255, 255, 0.05); 
@@ -305,11 +315,34 @@ body {
 .btn-play-pause svg { width: 28px; height: 28px; }
 .play-icon { margin-left: 3px; }
 
-.volume-container { display: flex; align-items: center; gap: 0.75rem; width: 160px; }
-.btn-mute { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; padding: 0.25rem; }
+/* Volume Slider with Gold Track Fill */
+.volume-container { display: flex; align-items: center; gap: 0.5rem; width: 180px; }
+.btn-mute { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; padding: 0.25rem; flex-shrink: 0; }
 .btn-mute svg { width: 20px; height: 20px; }
-.volume-slider { width: 100%; -webkit-appearance: none; appearance: none; height: 4px; background: rgba(255, 255, 255, 0.1); border-radius: var(--radius-full); outline: none; cursor: pointer; }
-.volume-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--text-secondary); cursor: pointer; }
+
+.volume-slider-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.volume-slider-wrapper .audio-slider {
+  height: 4px;
+}
+
+.volume-slider-wrapper .slider-fill {
+  height: 4px;
+  background: var(--accent-gold);
+}
+
+.volume-slider::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  cursor: pointer;
+}
 
 /* Drag Overlay */
 .drag-drop-overlay { position: fixed; inset: 0; background: rgba(8, 11, 17, 0.92); backdrop-filter: blur(8px); z-index: 1000; display: flex; align-items: center; justify-content: center; border: 3px dashed var(--accent-gold); margin: 1rem; border-radius: var(--radius-lg); }
@@ -425,7 +458,15 @@ body {
   stroke-width: 2px;
   stroke-dasharray: 6 3;
   animation: flowLine 20s linear infinite;
-  opacity: 0.75;
+  opacity: 0.35;
+  transition: all 0.2s ease;
+}
+
+.flowchart-connection-line.line-highlight {
+  stroke: var(--accent-gold);
+  stroke-width: 3.5px;
+  opacity: 1 !important;
+  stroke-dasharray: none;
 }
 
 @keyframes flowLine {
@@ -513,6 +554,12 @@ body {
   flex-direction: column;
   gap: 0.25rem;
   margin-bottom: 0.4rem;
+  cursor: pointer;
+}
+
+.flowchart-choice-item:hover {
+  border-color: var(--accent-gold);
+  background: rgba(245, 158, 11, 0.08);
 }
 
 .choice-main-line {
@@ -823,13 +870,19 @@ select option:checked {
     gap: 0.85rem;
   }
 
-  .volume-container {
-    width: 100%;
-    justify-content: center;
+  .utility-left, .utility-center, .utility-right {
+    flex: unset;
   }
 
-  .volume-slider {
-    max-width: 180px;
+  .utility-right {
+    width: 100%;
+    justify-content: center;
+    margin-top: 0.35rem;
+  }
+
+  .volume-container {
+    width: 100%;
+    max-width: 220px;
   }
 
   /* Modals Mobile Fixes */
