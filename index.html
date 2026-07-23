@@ -120,6 +120,9 @@
           <span id="story-filler" class="story-credit">Filler: Unknown</span>
         </div>
         <p id="story-description" class="story-description">Description of the loaded audio experience...</p>
+        
+        <!-- Story Tags List -->
+        <div id="story-tags" class="story-tags hidden"></div>
       </div>
 
       <!-- Central Media & Decision Card Zone -->
@@ -194,7 +197,12 @@
 
         <div class="controls-row">
           <div class="secondary-controls-left">
-            <button id="btn-restart-scene" class="btn-control-secondary" aria-label="Restart Scene" title="Restart Scene (R)">
+            <button id="btn-prev-scene" class="btn-control-secondary" aria-label="Previous Scene" title="Previous Scene (B)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+            </button>
+            <button id="btn-restart-scene" class="btn-control-secondary" aria-label="Restart Current Scene" title="Restart Scene (R)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M1 4v6h6"></path>
                 <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
@@ -224,6 +232,18 @@
                 <path d="M13 19l9-7-9-7v14zM2 19l9-7-9-7v14z"></path>
               </svg>
               <span class="control-subtext">+10s</span>
+            </button>
+
+            <button id="btn-toggle-bell" class="btn-control-secondary" aria-label="Toggle Choice Bell Chime Sound" title="Toggle Decision Bell Chime">
+              <svg id="icon-bell-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              <svg id="icon-bell-off" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" stroke-width="2"></line>
+              </svg>
             </button>
 
             <div class="speed-selector-wrapper">
@@ -275,16 +295,20 @@
               <input type="text" id="create-title" class="form-input" placeholder="e.g. My Audio Adventure" value="My Audio Adventure" />
             </div>
             <div class="form-group">
-              <label for="create-script-writer">Script Writer:</label>
-              <input type="text" id="create-script-writer" class="form-input" placeholder="e.g. Jane Doe" value="Anonymous Writer" />
+              <label for="create-script-writer">Script Writer <span class="required-star">*</span>:</label>
+              <input type="text" id="create-script-writer" class="form-input" placeholder="e.g. Jane Doe" value="Anonymous Writer" required />
             </div>
             <div class="form-group">
-              <label for="create-script-filler">Script Filler:</label>
-              <input type="text" id="create-script-filler" class="form-input" placeholder="e.g. John Smith" value="Anonymous Filler" />
+              <label for="create-script-filler">Script Filler <span class="required-star">*</span>:</label>
+              <input type="text" id="create-script-filler" class="form-input" placeholder="e.g. John Smith" value="Anonymous Filler" required />
             </div>
             <div class="form-group full-width">
               <label for="create-description">Story Description:</label>
               <textarea id="create-description" class="form-input form-textarea" rows="2" placeholder="Brief summary of your interactive story..."></textarea>
+            </div>
+            <div class="form-group full-width">
+              <label for="create-tags">Tags (separated by a comma and space):</label>
+              <input type="text" id="create-tags" class="form-input" placeholder="e.g. Fantasy, Mystery, Sci-Fi" />
             </div>
           </div>
         </div>
