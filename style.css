@@ -271,7 +271,6 @@ body {
 .btn-play-pause:hover { transform: scale(1.06); }
 .btn-play-pause svg { width: 28px; height: 28px; }
 .play-icon { margin-left: 3px; }
-.speed-select { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-subtle); color: var(--text-secondary); border-radius: var(--radius-md); padding: 0.4rem 0.6rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
 
 .volume-container { display: flex; align-items: center; gap: 0.75rem; width: 160px; margin-left: auto; }
 .btn-mute { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; }
@@ -293,7 +292,7 @@ body {
 .modal-body { padding: 1.5rem; overflow-y: auto; }
 .modal-footer { padding: 1.25rem 1.5rem; border-top: 1px solid var(--border-subtle); display: flex; justify-content: flex-end; }
 
-/* Creator Tool Styling */
+/* Creator Tool & Form Inputs */
 .creator-section { margin-bottom: 1.75rem; background: rgba(0, 0, 0, 0.2); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); }
 .creator-section h3 { font-size: 1rem; color: var(--accent-gold); margin-bottom: 1rem; }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
@@ -303,8 +302,55 @@ body {
 .form-group.full-width { grid-column: span 2; }
 .form-group label { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); }
 .required-star { color: #ef4444; margin-left: 2px; }
-.form-input { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.6rem 0.8rem; color: var(--text-primary); font-size: 0.9rem; outline: none; }
+
+.form-input { 
+  background: rgba(255, 255, 255, 0.05); 
+  border: 1px solid var(--border-subtle); 
+  border-radius: var(--radius-sm); 
+  padding: 0.6rem 0.8rem; 
+  color: var(--text-primary); 
+  font-size: 0.9rem; 
+  outline: none; 
+}
 .form-input:focus { border-color: var(--accent-gold); }
+
+/* HIGH CONTRAST DROPDOWN SELECT & OPTIONS FIX */
+select.form-input,
+select.speed-select,
+select {
+  background-color: #111625 !important;
+  color: #f8fafc !important;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  outline: none;
+}
+
+select.speed-select {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+}
+
+select option {
+  background-color: #111625 !important;
+  color: #f8fafc !important;
+  padding: 0.6rem 0.8rem;
+}
+
+select option:hover,
+select option:focus,
+select option:active,
+select option:checked {
+  background-color: #1a2238 !important;
+  color: var(--accent-gold) !important;
+}
+
+select option:disabled {
+  color: var(--text-muted) !important;
+}
 
 .scene-edit-card { background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
 .scene-edit-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.5rem; }
