@@ -172,7 +172,7 @@ class CYOACreator {
         audioFile: null,
         secondarySounds: [],
         choices: [
-          { text: "Go to Scene 2", next: "scene002", actions: [], conditionGate: "AND", conditions: [] }
+          { text: "Go to Scene 2", next: "scene002", actions: [], conditions: [], gates: [] }
         ]
       },
       {
@@ -214,20 +214,8 @@ class CYOACreator {
           audioFile: null,
           startTime: typeof s.startTime === 'number' ? s.startTime : 0,
           volume: typeof s.volume === 'number' ? s.volume : 1.0,
-          persist: Boolean(s.persist),
-          conditionGate: s.conditionGate || "AND",
-          conditions: s.conditions || []
+          persist: Boolean(s.persist)
         }));
-      } else if (sc.secondaryAudio) {
-        secSounds.push({
-          id: "sec_0",
-          audioFile: null,
-          startTime: typeof sc.secondaryStartTime === 'number' ? sc.secondaryStartTime : 0,
-          volume: typeof sc.secondaryVolume === 'number' ? sc.secondaryVolume : 1.0,
-          persist: Boolean(sc.secondaryPersist),
-          conditionGate: "AND",
-          conditions: []
-        });
       }
 
       return {
@@ -242,8 +230,8 @@ class CYOACreator {
           text: c.text,
           next: c.next || "",
           actions: c.actions || [],
-          conditionGate: c.conditionGate || "AND",
-          conditions: c.conditions || []
+          conditions: c.conditions || [],
+          gates: c.gates || []
         }))
       };
     });
@@ -367,7 +355,6 @@ class CYOACreator {
           </div>
         </div>
 
-        <!-- Multiple Overlaid Secondary Sounds Section -->
         <div class="secondary-sound-section">
           <div class="section-header">
             <label><strong>Overlaid Secondary Sounds (${(scene.secondarySounds || []).length}):</strong></label>
@@ -444,7 +431,22 @@ class CYOACreator {
         choiceRow.className = 'choice-edit-box';
 
         const condCount = choice.conditions ? choice.conditions.length : 0;
-        const showGate = condCount >= 2;
+        const gatesCount = choice.gates ? choice.gates.length : 0;
+
+        // Build list of available inputs for Binary Gate funneling
+        const availableSignalPool = [];
+        (choice.conditions || []).forEach((cd, cIdx) => {
+          const cId = cd.id || ("C" + (cIdx + 1));
+          cd.id = cId;
+          const varObj = this.variables.find(v => v.name === cd.var);
+          availableSignalPool.push({ id: cId, label: `Condition #${cIdx + 1} (${cId}: ${cd.var || 'var'} ${cd.op || '=='})` });
+        });
+
+        (choice.gates || []).forEach((gt, gIdx) => {
+          const gId = gt.id || ("G" + (gIdx + 1));
+          gt.id = gId;
+          availableSignalPool.push({ id: gId, label: `Gate #${gIdx + 1} Output (${gId}: ${gt.gateType || 'AND'})` });
+        });
 
         choiceRow.innerHTML = `
           <div class="choice-edit-main-row">
@@ -458,27 +460,27 @@ class CYOACreator {
             <button class="btn btn-danger btn-sm btn-delete-choice" data-sindex="${index}" data-cindex="${cIndex}">&times;</button>
           </div>
 
+          <!-- Variable Conditions List -->
           <div class="choice-sub-editor">
             <div class="sub-editor-header">
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span>Required Conditions (${condCount}):</span>
-                ${showGate ? `
-                  <span style="font-size:0.75rem; color: var(--accent-gold); font-weight:700;">Combiner Gate:</span>
-                  <select class="form-input cond-gate-select" data-sindex="${index}" data-cindex="${cIndex}">
-                    <option value="AND" ${(choice.conditionGate || 'AND') === 'AND' ? 'selected' : ''}>AND</option>
-                    <option value="OR" ${choice.conditionGate === 'OR' ? 'selected' : ''}>OR</option>
-                    <option value="NAND" ${choice.conditionGate === 'NAND' ? 'selected' : ''}>NAND</option>
-                    <option value="NOR" ${choice.conditionGate === 'NOR' ? 'selected' : ''}>NOR</option>
-                    <option value="XOR" ${choice.conditionGate === 'XOR' ? 'selected' : ''}>XOR</option>
-                    <option value="XNOR" ${choice.conditionGate === 'XNOR' ? 'selected' : ''}>XNOR</option>
-                  </select>
-                ` : ''}
-              </div>
+              <span>Required Conditions (${condCount}):</span>
               <button class="btn btn-secondary btn-sm btn-add-cond" data-sindex="${index}" data-cindex="${cIndex}">+ Condition</button>
             </div>
             <div class="conditions-list" id="cond-list-${index}-${cIndex}"></div>
           </div>
 
+          <!-- 2-Input Binary Logic Gate Funnel (Shown when 2+ conditions exist) -->
+          ${condCount >= 2 ? `
+            <div class="choice-sub-editor" style="border-color: var(--accent-gold);">
+              <div class="sub-editor-header">
+                <span style="color: var(--accent-gold); font-weight:700;">Binary Logic Gate Funnel (2 Inputs &rarr; 1 Output):</span>
+                <button class="btn btn-secondary btn-sm btn-add-gate" data-sindex="${index}" data-cindex="${cIndex}">+ Add 2-Input Gate</button>
+              </div>
+              <div class="gates-list" id="gate-list-${index}-${cIndex}"></div>
+            </div>
+          ` : ''}
+
+          <!-- Variable Modifiers -->
           <div class="choice-sub-editor">
             <div class="sub-editor-header">
               <span>Variable Modifiers (${choice.actions ? choice.actions.length : 0}):</span>
@@ -529,25 +531,26 @@ class CYOACreator {
           const isCustom = cond.targetType === 'custom' || !cond.targetType;
           let customInputHtml = '';
           if (varType === 'float' && isCustom) {
-            customInputHtml = `<input type="number" step="any" class="form-input cond-val-input" value="${cond.value !== undefined ? cond.value : ''}" placeholder="Number" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}" style="flex:1;" />`;
+            customInputHtml = `<input type="number" step="any" class="form-input cond-val-input" value="${cond.value !== undefined ? cond.value : ''}" placeholder="Number" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}" style="flex:1; min-width:60px;" />`;
           } else if (varType === 'string' && isCustom) {
-            customInputHtml = `<input type="text" class="form-input cond-val-input" value="${cond.value !== undefined ? cond.value : ''}" placeholder="Text" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}" style="flex:1;" />`;
+            customInputHtml = `<input type="text" class="form-input cond-val-input" value="${cond.value !== undefined ? cond.value : ''}" placeholder="Text" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}" style="flex:1; min-width:60px;" />`;
           }
 
           const condRow = document.createElement('div');
           condRow.className = 'sub-rule-row';
           condRow.innerHTML = `
-            <select class="form-input cond-unary-select" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}" style="width:75px;">
+            <span class="rule-id-tag">${cond.id || ('C' + (condIdx + 1))}</span>
+            <select class="form-input cond-unary-select" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}" style="width:65px; flex-shrink:0;">
               <option value="BUFFER" ${(cond.unary || 'BUFFER') === 'BUFFER' ? 'selected' : ''}>If</option>
               <option value="NOT" ${cond.unary === 'NOT' ? 'selected' : ''}>NOT</option>
             </select>
-            <select class="form-input cond-var-select" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}">
+            <select class="form-input cond-var-select" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}" style="flex:1.2; min-width:90px;">
               ${this.variables.map(v => `<option value="${v.name}" ${cond.var === v.name ? 'selected' : ''}>${v.name} (${v.type})</option>`).join('')}
             </select>
-            <select class="form-input cond-op-select" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}">
+            <select class="form-input cond-op-select" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}" style="flex:1.2; min-width:90px;">
               ${opOptions}
             </select>
-            <select class="form-input cond-target-select" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}">
+            <select class="form-input cond-target-select" data-sindex="${index}" data-cindex="${cIndex}" data-condindex="${condIdx}" style="flex:1; min-width:80px;">
               ${targetSelectOptions}
             </select>
             ${customInputHtml}
@@ -555,6 +558,38 @@ class CYOACreator {
           `;
           condContainer.appendChild(condRow);
         });
+
+        // Render Binary Gates List
+        const gateContainer = choiceRow.querySelector(`#gate-list-${index}-${cIndex}`);
+        if (gateContainer) {
+          (choice.gates || []).forEach((gate, gIdx) => {
+            const gRow = document.createElement('div');
+            gRow.className = 'sub-rule-row';
+            
+            const optA = availableSignalPool.map(sig => `<option value="${sig.id}" ${gate.inputA === sig.id ? 'selected' : ''}>Input A: ${sig.label}</option>`).join('');
+            const optB = availableSignalPool.map(sig => `<option value="${sig.id}" ${gate.inputB === sig.id ? 'selected' : ''}>Input B: ${sig.label}</option>`).join('');
+
+            gRow.innerHTML = `
+              <span class="rule-id-tag">${gate.id || ('G' + (gIdx + 1))}</span>
+              <select class="form-input gate-type-select" data-sindex="${index}" data-cindex="${cIndex}" data-gindex="${gIdx}" style="width:85px; flex-shrink:0;">
+                <option value="AND" ${gate.gateType === 'AND' ? 'selected' : ''}>AND</option>
+                <option value="OR" ${gate.gateType === 'OR' ? 'selected' : ''}>OR</option>
+                <option value="NAND" ${gate.gateType === 'NAND' ? 'selected' : ''}>NAND</option>
+                <option value="NOR" ${gate.gateType === 'NOR' ? 'selected' : ''}>NOR</option>
+                <option value="XOR" ${gate.gateType === 'XOR' ? 'selected' : ''}>XOR</option>
+                <option value="XNOR" ${gate.gateType === 'XNOR' ? 'selected' : ''}>XNOR</option>
+              </select>
+              <select class="form-input gate-in-a-select" data-sindex="${index}" data-cindex="${cIndex}" data-gindex="${gIdx}" style="flex:1; min-width:110px;">
+                ${optA}
+              </select>
+              <select class="form-input gate-in-b-select" data-sindex="${index}" data-cindex="${cIndex}" data-gindex="${gIdx}" style="flex:1; min-width:110px;">
+                ${optB}
+              </select>
+              <button class="btn btn-danger btn-sm btn-delete-gate" data-sindex="${index}" data-cindex="${cIndex}" data-gindex="${gIdx}">&times;</button>
+            `;
+            gateContainer.appendChild(gRow);
+          });
+        }
 
         // Render Action Rows
         const actContainer = choiceRow.querySelector(`#act-list-${index}-${cIndex}`);
@@ -598,23 +633,23 @@ class CYOACreator {
               targetSelectOptions += `<option value="custom" ${act.targetType === 'custom' || !act.targetType ? 'selected' : ''}>Custom ${varType === 'float' ? 'Value' : 'Text'}</option>`;
             }
 
-            targetSelectHtml = `<select class="form-input act-target-select" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}">${targetSelectOptions}</select>`;
+            targetSelectHtml = `<select class="form-input act-target-select" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}" style="flex:1; min-width:80px;">${targetSelectOptions}</select>`;
 
             const isCustom = act.targetType === 'custom' || !act.targetType;
             if (varType === 'float' && isCustom) {
-              customValHtml = `<input type="number" step="any" class="form-input act-val-input" value="${act.value !== undefined ? act.value : ''}" placeholder="Number" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}" style="flex:1;" />`;
+              customValHtml = `<input type="number" step="any" class="form-input act-val-input" value="${act.value !== undefined ? act.value : ''}" placeholder="Number" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}" style="flex:1; min-width:60px;" />`;
             } else if (varType === 'string' && isCustom) {
-              customValHtml = `<input type="text" class="form-input act-val-input" value="${act.value !== undefined ? act.value : ''}" placeholder="Text" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}" style="flex:1;" />`;
+              customValHtml = `<input type="text" class="form-input act-val-input" value="${act.value !== undefined ? act.value : ''}" placeholder="Text" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}" style="flex:1; min-width:60px;" />`;
             }
           }
 
           const actRow = document.createElement('div');
           actRow.className = 'sub-rule-row';
           actRow.innerHTML = `
-            <select class="form-input act-var-select" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}">
+            <select class="form-input act-var-select" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}" style="flex:1.2; min-width:90px;">
               ${this.variables.map(v => `<option value="${v.name}" ${act.var === v.name ? 'selected' : ''}>${v.name} (${v.type})</option>`).join('')}
             </select>
-            <select class="form-input act-op-select" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}">
+            <select class="form-input act-op-select" data-sindex="${index}" data-cindex="${cIndex}" data-actindex="${actIdx}" style="flex:1; min-width:80px;">
               ${actOpOptions}
             </select>
             ${targetSelectHtml}
@@ -710,18 +745,30 @@ class CYOACreator {
       };
     });
 
-    document.querySelectorAll('.cond-gate-select').forEach(el => {
-      el.onchange = (e) => {
-        this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].conditionGate = e.target.value;
-      };
-    });
-
     document.querySelectorAll('.btn-add-cond').forEach(el => {
       el.onclick = (e) => {
         const s = e.target.dataset.sindex, c = e.target.dataset.cindex;
         if (!this.scenes[s].choices[c].conditions) this.scenes[s].choices[c].conditions = [];
+        const conds = this.scenes[s].choices[c].conditions;
+        const newId = "C" + (conds.length + 1);
         const firstVar = this.variables[0] ? this.variables[0].name : '';
-        this.scenes[s].choices[c].conditions.push({ unary: 'BUFFER', var: firstVar, op: '==', targetType: 'custom', value: '' });
+        conds.push({ id: newId, unary: 'BUFFER', var: firstVar, op: '==', targetType: 'custom', value: '' });
+        this.renderUI();
+      };
+    });
+
+    document.querySelectorAll('.btn-add-gate').forEach(el => {
+      el.onclick = (e) => {
+        const s = e.target.dataset.sindex, c = e.target.dataset.cindex;
+        if (!this.scenes[s].choices[c].gates) this.scenes[s].choices[c].gates = [];
+        const gates = this.scenes[s].choices[c].gates;
+        const newId = "G" + (gates.length + 1);
+        
+        const conds = this.scenes[s].choices[c].conditions || [];
+        const inA = conds[0] ? conds[0].id : "C1";
+        const inB = conds[1] ? conds[1].id : "C2";
+
+        gates.push({ id: newId, gateType: 'AND', inputA: inA, inputB: inB });
         this.renderUI();
       };
     });
@@ -775,6 +822,22 @@ class CYOACreator {
       };
     });
 
+    document.querySelectorAll('.gate-type-select').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].gates[e.target.dataset.gindex].gateType = e.target.value; };
+    });
+    document.querySelectorAll('.gate-in-a-select').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].gates[e.target.dataset.gindex].inputA = e.target.value; };
+    });
+    document.querySelectorAll('.gate-in-b-select').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].gates[e.target.dataset.gindex].inputB = e.target.value; };
+    });
+    document.querySelectorAll('.btn-delete-gate').forEach(el => {
+      el.onclick = (e) => {
+        this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].gates.splice(e.target.dataset.gindex, 1);
+        this.renderUI();
+      };
+    });
+
     document.querySelectorAll('.act-var-select').forEach(el => {
       el.onchange = (e) => {
         const act = this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].actions[e.target.dataset.actindex];
@@ -819,7 +882,7 @@ class CYOACreator {
       el.onclick = (e) => {
         const sIndex = parseInt(e.target.dataset.index, 10);
         const targetScene = this.scenes[sIndex + 1] ? this.scenes[sIndex + 1].id : (this.scenes[0] ? this.scenes[0].id : "");
-        this.scenes[sIndex].choices.push({ text: "New Option", next: targetScene, actions: [], conditionGate: "AND", conditions: [] });
+        this.scenes[sIndex].choices.push({ text: "New Option", next: targetScene, actions: [], conditions: [], gates: [] });
         this.renderUI();
       };
     });
@@ -968,7 +1031,7 @@ class CYOAPlayerApp {
     this.zipArchive = null;
     this.currentSceneId = null;
     this.state = { variables: {}, history: [], visitedScenes: new Set() };
-    this.settings = { bellEnabled: true, flowchartLineMode: "hover" }; // 'hover' | 'all' | 'hidden'
+    this.settings = { bellEnabled: true, flowchartLineMode: "hover" };
     this.activeObjectUrls = [];
     this.bellDelayTimer = null;
     this.timedChoiceInterval = null;
@@ -1291,20 +1354,50 @@ class CYOAPlayerApp {
     return result;
   }
 
-  evalConditionsWithGate(conditions, gate, variables) {
-    if (!conditions || !Array.isArray(conditions) || conditions.length === 0) return true;
-    const results = conditions.map(c => this.evalCondition(c, variables));
-    const gateType = (gate || 'AND').toUpperCase();
+  // 2-INPUT BINARY GATE FUNNEL EVALUATOR
+  evalGateTree(conditions, gates, variables) {
+    if (!conditions || conditions.length === 0) return true;
 
-    switch (gateType) {
-      case 'AND':  return results.every(Boolean);
-      case 'NAND': return !results.every(Boolean);
-      case 'OR':   return results.some(Boolean);
-      case 'NOR':  return !results.some(Boolean);
-      case 'XOR':  return results.filter(Boolean).length % 2 === 1;
-      case 'XNOR': return results.filter(Boolean).length % 2 === 0;
-      default:     return results.every(Boolean);
+    const signalValues = {};
+    conditions.forEach((c, idx) => {
+      const cId = c.id || ("C" + (idx + 1));
+      signalValues[cId] = this.evalCondition(c, variables);
+    });
+
+    if (conditions.length === 1) {
+      const firstId = conditions[0].id || "C1";
+      return Boolean(signalValues[firstId]);
     }
+
+    if (!gates || !Array.isArray(gates) || gates.length === 0) {
+      return Object.values(signalValues).every(Boolean);
+    }
+
+    const computeGate = (type, a, b) => {
+      switch ((type || 'AND').toUpperCase()) {
+        case 'AND':  return a && b;
+        case 'OR':   return a || b;
+        case 'NAND': return !(a && b);
+        case 'NOR':  return !(a || b);
+        case 'XOR':  return (a && !b) || (!a && b);
+        case 'XNOR': return !((a && !b) || (!a && b));
+        default:     return a && b;
+      }
+    };
+
+    gates.forEach((g, gIdx) => {
+      const gId = g.id || ("G" + (gIdx + 1));
+      const valA = Boolean(signalValues[g.inputA]);
+      const valB = Boolean(signalValues[g.inputB]);
+      signalValues[gId] = computeGate(g.gateType, valA, valB);
+    });
+
+    const lastGate = gates[gates.length - 1];
+    if (lastGate && lastGate.id && (lastGate.id in signalValues)) {
+      return Boolean(signalValues[lastGate.id]);
+    }
+
+    return Object.values(signalValues).every(Boolean);
   }
 
   applyAction(action, variables) {
@@ -1440,7 +1533,7 @@ class CYOAPlayerApp {
         card.dataset.sceneId = sceneId;
 
         let secAudioBadge = '';
-        const secSounds = sc.secondarySounds || (sc.secondaryAudio ? [{ audio: sc.secondaryAudio, startTime: sc.secondaryStartTime, volume: sc.secondaryVolume, persist: sc.secondaryPersist }] : []);
+        const secSounds = sc.secondarySounds || [];
         if (secSounds.length > 0) {
           secAudioBadge = `<div class="flowchart-sec-badge">🎵 Overlaid Sounds (${secSounds.length})</div>`;
         }
@@ -1448,7 +1541,7 @@ class CYOAPlayerApp {
         let choicesHtml = '';
         if (sc.choices && sc.choices.length > 0) {
           choicesHtml = sc.choices.map((c, idx) => {
-            let condText = (c.conditions && c.conditions.length > 0) ? `<div class="flowchart-cond-pill">🔒 Gate [${c.conditionGate || 'AND'}]: ${c.conditions.map(cd => `${cd.unary === 'NOT' ? 'NOT ' : ''}${cd.var} ${cd.op} ${cd.targetType === 'variable' ? cd.targetVar : cd.value}`).join(' & ')}</div>` : '';
+            let condText = (c.conditions && c.conditions.length > 0) ? `<div class="flowchart-cond-pill">🔒 Req: ${c.conditions.map(cd => `${cd.unary === 'NOT' ? 'NOT ' : ''}${cd.var} ${cd.op} ${cd.targetType === 'variable' ? cd.targetVar : cd.value}`).join(' & ')}</div>` : '';
             let actText = (c.actions && c.actions.length > 0) ? `<div class="flowchart-act-pill">⚡ ${c.actions.map(a => `${a.var} ${a.op} ${a.targetType === 'variable' ? a.targetVar : a.value}`).join(', ')}</div>` : '';
 
             return `
@@ -1506,7 +1599,6 @@ class CYOAPlayerApp {
     svg.setAttribute('width', wrapper.scrollWidth);
     svg.setAttribute('height', wrapper.scrollHeight);
 
-    // Clear old lines
     svg.querySelectorAll('.flowchart-connection-line').forEach(l => l.remove());
 
     if (this.settings.flowchartLineMode === 'hidden') return;
@@ -1548,7 +1640,6 @@ class CYOAPlayerApp {
 
           svg.appendChild(path);
 
-          // Bind hover events on choice item to highlight its line
           item.onmouseenter = () => {
             path.style.display = 'block';
             path.classList.add('line-highlight');
@@ -1562,7 +1653,6 @@ class CYOAPlayerApp {
         }
       });
 
-      // Bind hover event on entire scene card to highlight outgoing lines
       card.onmouseenter = () => {
         svg.querySelectorAll(`path[data-from="${fromId}"]`).forEach(p => {
           p.style.display = 'block';
@@ -1639,9 +1729,6 @@ class CYOAPlayerApp {
   // ACCURATE MULTI-TRACK SECONDARY AUDIO SYNC & SEEKING ENGINE
   syncSecondaryAudio() {
     if (!this.dom.audio || this.activeSecondaryAudioElements.length === 0) return;
-    const scene = this.storyData && this.storyData.scenes && this.storyData.scenes[this.currentSceneId];
-    if (!scene) return;
-
     const mainCurTime = this.dom.audio.currentTime || 0;
 
     this.activeSecondaryAudioElements.forEach(item => {
@@ -1651,18 +1738,13 @@ class CYOAPlayerApp {
       const duration = item.audioEl.duration || 999999;
 
       if (offset >= 0 && offset < duration) {
-        // Check secondary sound conditions
-        if (this.evalConditionsWithGate(item.conditions, item.conditionGate, this.state.variables)) {
-          if (Math.abs(item.audioEl.currentTime - offset) > 0.3) {
-            item.audioEl.currentTime = offset;
-          }
-          if (!this.dom.audio.paused && item.audioEl.paused) {
-            item.audioEl.play().catch(() => {});
-          }
-          item.triggered = true;
-        } else {
-          item.audioEl.pause();
+        if (Math.abs(item.audioEl.currentTime - offset) > 0.3) {
+          item.audioEl.currentTime = offset;
         }
+        if (!this.dom.audio.paused && item.audioEl.paused) {
+          item.audioEl.play().catch(() => {});
+        }
+        item.triggered = true;
       } else {
         if (!item.audioEl.paused) {
           item.audioEl.pause();
@@ -1802,8 +1884,8 @@ class CYOAPlayerApp {
 
     this.updateMediaCardVisibility();
 
-    // Prepare Scene's Secondary Audio Tracks
-    const secSounds = scene.secondarySounds || (scene.secondaryAudio ? [{ audio: scene.secondaryAudio, startTime: scene.secondaryStartTime, volume: scene.secondaryVolume, persist: scene.secondaryPersist }] : []);
+    // Prepare Secondary Audio Tracks
+    const secSounds = scene.secondarySounds || [];
     for (let sec of secSounds) {
       if (sec.audio) {
         const sfxUrl = await CYOAParser.extractAudioBlobUrl(this.zipArchive, sec.audio);
@@ -1819,8 +1901,6 @@ class CYOAPlayerApp {
             startTime: sec.startTime || 0,
             relativeVolume: relVol,
             persist: Boolean(sec.persist),
-            conditionGate: sec.conditionGate || "AND",
-            conditions: sec.conditions || [],
             triggered: false
           });
         }
@@ -1873,14 +1953,12 @@ class CYOAPlayerApp {
     const scene = this.storyData.scenes[this.currentSceneId];
     const allChoices = (scene && scene.choices) || [];
 
-    // Filter choices with Logic Gate evaluation
-    const validChoices = allChoices.filter(c => this.evalConditionsWithGate(c.conditions, c.conditionGate, this.state.variables));
+    // Filter choices with 2-input Binary Gate Funnel evaluation
+    const validChoices = allChoices.filter(c => this.evalGateTree(c.conditions, c.gates, this.state.variables));
 
     const { timer } = this.getSceneSettings(scene);
 
-    // AUTO-BRANCHING RULE:
-    // If Timer = 0 AND exactly 1 valid choice exists:
-    // Skip prompting user and automatically branch to destination scene!
+    // AUTO-BRANCHING RULE: Timer = 0 & 1 Choice
     if (timer === 0 && validChoices.length === 1) {
       const singleChoice = validChoices[0];
       this.applyActions(singleChoice.actions, this.state.variables);
@@ -2104,7 +2182,7 @@ class CYOAPlayerApp {
     if (e.key >= '1' && e.key <= '9') {
       const idx = parseInt(e.key, 10) - 1;
       const choices = this.storyData && this.storyData.scenes && this.storyData.scenes[this.currentSceneId] && this.storyData.scenes[this.currentSceneId].choices;
-      const validChoices = (choices || []).filter(c => this.evalConditionsWithGate(c.conditions, c.conditionGate, this.state.variables));
+      const validChoices = (choices || []).filter(c => this.evalGateTree(c.conditions, c.gates, this.state.variables));
       if (validChoices && validChoices[idx] && this.choicesRevealed) {
         this.soundEngine.playClick();
         this.selectChoice(validChoices[idx]);
