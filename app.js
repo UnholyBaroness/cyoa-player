@@ -397,7 +397,7 @@ class CYOACreator {
 
       container.appendChild(card);
 
-      // Render Secondary Sound Cards with Conditional Rules
+      // Render Secondary Sound Cards with Conditions
       const secListContainer = card.querySelector(`#sec-sounds-list-${index}`);
       (scene.secondarySounds || []).forEach((secSound, secIdx) => {
         const secCard = document.createElement('div');
@@ -419,7 +419,7 @@ class CYOACreator {
             </div>
             <div class="form-group full-width" style="flex-direction: row; align-items: center; gap: 0.5rem;">
               <input type="checkbox" id="sec-persist-${index}-${secIdx}" class="sec-persist-input" ${secSound.persist ? 'checked' : ''} data-sindex="${index}" data-secindex="${secIdx}" />
-              <label for="sec-persist-${index}-${secIdx}" style="margin: 0; cursor: pointer;">Persist Audio Across Scenes (Continue playing into next scene)</label>
+              <label for="sec-persist-${index}-${secIdx}" style="margin: 0; cursor: pointer;">Persist Audio Across Scenes</label>
             </div>
           </div>
         `;
@@ -686,7 +686,6 @@ class CYOACreator {
       };
     });
 
-    // Secondary Sound Handlers
     document.querySelectorAll('.btn-add-sec-sound').forEach(el => {
       el.onclick = (e) => {
         const sIdx = e.target.dataset.index;
@@ -1440,7 +1439,7 @@ class CYOAPlayerApp {
     actions.forEach(a => this.applyAction(a, variables));
   }
 
-  // --- FLOWCHART MODAL METHODS WITH OVERVIEW & HOVER HIGHLIGHTING ---
+  // --- FLOWCHART MODAL METHODS WITH GUTTER ROUTING & CARD HOVER LOGIC ---
   openFlowchartModal() {
     if (!this.storyData) return;
     this.renderFlowchart();
@@ -1522,6 +1521,7 @@ class CYOAPlayerApp {
     sortedLevels.forEach(lvl => {
       const column = document.createElement('div');
       column.className = 'flowchart-column';
+      column.dataset.colLevel = lvl;
 
       levelGroups[lvl].forEach(sceneId => {
         const sc = scenes[sceneId];
@@ -1545,7 +1545,7 @@ class CYOAPlayerApp {
             let actText = (c.actions && c.actions.length > 0) ? `<div class="flowchart-act-pill">⚡ ${c.actions.map(a => `${a.var} ${a.op} ${a.targetType === 'variable' ? a.targetVar : a.value}`).join(', ')}</div>` : '';
 
             return `
-              <div class="flowchart-choice-item" data-from="${sceneId}" data-target="${c.next || ''}">
+              <div class="flowchart-choice-item" data-from="${sceneId}" data-target="${c.next || ''}" data-choice-index="${idx}">
                 <div class="choice-main-line">
                   <span class="choice-num">${idx + 1}</span>
                   <span class="choice-label">${c.text}</span>
@@ -1592,7 +1592,7 @@ class CYOAPlayerApp {
     setTimeout(() => this.drawFlowchartConnections(svgCanvas, treeWrapper), 60);
   }
 
-  // ACCURATE CHANNEL ROUTING ENGINE FOR FLOWCHART LINES
+  // GUTTER-BASED ZERO-OVERLAP ROUTING ENGINE & CARD DEFAULT TIMEOUT HOVER HIGHLIGHTING
   drawFlowchartConnections(svg, wrapper) {
     if (!svg || !wrapper) return;
     const wrapperRect = wrapper.getBoundingClientRect();
@@ -1610,11 +1610,20 @@ class CYOAPlayerApp {
 
     sceneCards.forEach(card => {
       const fromId = card.dataset.sceneId;
+      const sceneObj = this.storyData.scenes[fromId];
       const choiceItems = card.querySelectorAll('.flowchart-choice-item');
+
+      // Determine default timeout target for Card Hovering
+      let defaultTargetId = sceneObj ? sceneObj.timeoutNext : null;
+      if (!defaultTargetId && sceneObj && sceneObj.choices && sceneObj.choices[0]) {
+        defaultTargetId = sceneObj.choices[0].next;
+      }
 
       choiceItems.forEach(item => {
         const toId = item.dataset.target;
         const targetCard = cardMap[toId];
+        const cIndex = item.dataset.choiceIndex;
+
         if (toId && targetCard) {
           const itemRect = item.getBoundingClientRect();
           const targetRect = targetCard.getBoundingClientRect();
@@ -1625,20 +1634,33 @@ class CYOAPlayerApp {
           const x2 = (targetRect.left - wrapperRect.left) + wrapper.scrollLeft;
           const y2 = (targetRect.top + targetRect.height / 2 - wrapperRect.top) + wrapper.scrollTop;
 
-          const radius = 12;
-          const channelX = (x1 + x2) / 2;
+          // Compute Gutter X channel outside of card boxes
+          const cardCol = card.parentElement;
+          const targetCol = targetCard.parentElement;
+          const colRect = cardCol.getBoundingClientRect();
+
+          let gutterX = (colRect.right - wrapperRect.left) + wrapper.scrollLeft + 25;
+          if (targetCol && targetCol !== cardCol) {
+            const targetColRect = targetCol.getBoundingClientRect();
+            if (targetColRect.left > colRect.right) {
+              gutterX = (colRect.right - wrapperRect.left) + (targetColRect.left - colRect.right) / 2 + wrapper.scrollLeft;
+            }
+          }
+
+          // Smooth Orthogonal Path Routing around cards
+          const radius = 10;
           const dy = y2 >= y1 ? 1 : -1;
+          const dirX = x2 >= gutterX ? 1 : -1;
 
           let d = '';
-          if (Math.abs(y2 - y1) < 15) {
+          if (Math.abs(y2 - y1) < 12) {
             d = `M ${x1} ${y1} L ${x2} ${y2}`;
           } else {
-            // Smooth Channel routing with rounded elbows around node boxes
             d = `M ${x1} ${y1} ` +
-                `L ${channelX - radius} ${y1} ` +
-                `Q ${channelX} ${y1}, ${channelX} ${y1 + radius * dy} ` +
-                `L ${channelX} ${y2 - radius * dy} ` +
-                `Q ${channelX} ${y2}, ${channelX + radius} ${y2} ` +
+                `L ${gutterX - radius} ${y1} ` +
+                `Q ${gutterX} ${y1}, ${gutterX} ${y1 + radius * dy} ` +
+                `L ${gutterX} ${y2 - radius * dy} ` +
+                `Q ${gutterX} ${y2}, ${gutterX + dirX * radius} ${y2} ` +
                 `L ${x2} ${y2}`;
           }
 
@@ -1647,6 +1669,7 @@ class CYOAPlayerApp {
           path.setAttribute('class', 'flowchart-connection-line');
           path.setAttribute('data-from', fromId);
           path.setAttribute('data-to', toId);
+          path.setAttribute('data-choice-idx', cIndex);
           path.setAttribute('marker-end', 'url(#flowchart-arrow)');
 
           if (this.settings.flowchartLineMode === 'hover') {
@@ -1655,11 +1678,21 @@ class CYOAPlayerApp {
 
           svg.appendChild(path);
 
-          item.onmouseenter = () => {
+          // Individual Choice Hover Handler
+          item.onmouseenter = (e) => {
+            e.stopPropagation();
+            // Hide all lines from this scene first
+            svg.querySelectorAll(`path[data-from="${fromId}"]`).forEach(p => {
+              p.classList.remove('line-highlight');
+              if (this.settings.flowchartLineMode === 'hover') p.style.display = 'none';
+            });
+            // Highlight ONLY this choice's line
             path.style.display = 'block';
             path.classList.add('line-highlight');
           };
-          item.onmouseleave = () => {
+
+          item.onmouseleave = (e) => {
+            e.stopPropagation();
             if (this.settings.flowchartLineMode === 'hover') {
               path.style.display = 'none';
             }
@@ -1668,23 +1701,27 @@ class CYOAPlayerApp {
         }
       });
 
+      // Card Hover Handler: Highlights ONLY the default timeout choice arrow
       card.onmouseenter = () => {
         svg.querySelectorAll(`path[data-from="${fromId}"]`).forEach(p => {
-          p.style.display = 'block';
-          p.classList.add('line-highlight');
+          p.classList.remove('line-highlight');
+          if (this.settings.flowchartLineMode === 'hover') p.style.display = 'none';
         });
-      };
-      card.onmouseleave = () => {
-        if (this.settings.flowchartLineMode === 'hover') {
-          svg.querySelectorAll(`path[data-from="${fromId}"]`).forEach(p => {
-            p.style.display = 'none';
-            p.classList.remove('line-highlight');
-          });
-        } else {
-          svg.querySelectorAll(`path[data-from="${fromId}"]`).forEach(p => {
-            p.classList.remove('line-highlight');
-          });
+
+        if (defaultTargetId) {
+          const defaultPath = svg.querySelector(`path[data-from="${fromId}"][data-to="${defaultTargetId}"]`);
+          if (defaultPath) {
+            defaultPath.style.display = 'block';
+            defaultPath.classList.add('line-highlight');
+          }
         }
+      };
+
+      card.onmouseleave = () => {
+        svg.querySelectorAll(`path[data-from="${fromId}"]`).forEach(p => {
+          p.classList.remove('line-highlight');
+          if (this.settings.flowchartLineMode === 'hover') p.style.display = 'none';
+        });
       };
     });
   }
