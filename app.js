@@ -214,7 +214,9 @@ class CYOACreator {
           audioFile: null,
           startTime: typeof s.startTime === 'number' ? s.startTime : 0,
           volume: typeof s.volume === 'number' ? s.volume : 1.0,
-          persist: Boolean(s.persist)
+          persist: Boolean(s.persist),
+          conditions: s.conditions || [],
+          gates: s.gates || []
         }));
       }
 
@@ -395,7 +397,7 @@ class CYOACreator {
 
       container.appendChild(card);
 
-      // Render Secondary Sound Cards
+      // Render Secondary Sound Cards with Conditional Rules
       const secListContainer = card.querySelector(`#sec-sounds-list-${index}`);
       (scene.secondarySounds || []).forEach((secSound, secIdx) => {
         const secCard = document.createElement('div');
@@ -412,7 +414,7 @@ class CYOACreator {
               <input type="number" step="0.1" min="0" class="form-input sec-start-input" value="${secSound.startTime}" data-sindex="${index}" data-secindex="${secIdx}" />
             </div>
             <div class="form-group">
-              <label>Relative Volume (e.g. 1.0, 1.5, 2.0):</label>
+              <label>Relative Volume (e.g. 1.0, 1.5):</label>
               <input type="number" step="0.1" min="0" class="form-input sec-vol-input" value="${secSound.volume}" data-sindex="${index}" data-secindex="${secIdx}" />
             </div>
             <div class="form-group full-width" style="flex-direction: row; align-items: center; gap: 0.5rem;">
@@ -431,21 +433,18 @@ class CYOACreator {
         choiceRow.className = 'choice-edit-box';
 
         const condCount = choice.conditions ? choice.conditions.length : 0;
-        const gatesCount = choice.gates ? choice.gates.length : 0;
 
-        // Build list of available inputs for Binary Gate funneling
         const availableSignalPool = [];
         (choice.conditions || []).forEach((cd, cIdx) => {
           const cId = cd.id || ("C" + (cIdx + 1));
           cd.id = cId;
-          const varObj = this.variables.find(v => v.name === cd.var);
-          availableSignalPool.push({ id: cId, label: `Condition #${cIdx + 1} (${cId}: ${cd.var || 'var'} ${cd.op || '=='})` });
+          availableSignalPool.push({ id: cId, label: `Condition #${cIdx + 1} (${cId})` });
         });
 
         (choice.gates || []).forEach((gt, gIdx) => {
           const gId = gt.id || ("G" + (gIdx + 1));
           gt.id = gId;
-          availableSignalPool.push({ id: gId, label: `Gate #${gIdx + 1} Output (${gId}: ${gt.gateType || 'AND'})` });
+          availableSignalPool.push({ id: gId, label: `Gate #${gIdx + 1} (${gId})` });
         });
 
         choiceRow.innerHTML = `
@@ -460,7 +459,6 @@ class CYOACreator {
             <button class="btn btn-danger btn-sm btn-delete-choice" data-sindex="${index}" data-cindex="${cIndex}">&times;</button>
           </div>
 
-          <!-- Variable Conditions List -->
           <div class="choice-sub-editor">
             <div class="sub-editor-header">
               <span>Required Conditions (${condCount}):</span>
@@ -469,18 +467,16 @@ class CYOACreator {
             <div class="conditions-list" id="cond-list-${index}-${cIndex}"></div>
           </div>
 
-          <!-- 2-Input Binary Logic Gate Funnel (Shown when 2+ conditions exist) -->
           ${condCount >= 2 ? `
             <div class="choice-sub-editor" style="border-color: var(--accent-gold);">
               <div class="sub-editor-header">
-                <span style="color: var(--accent-gold); font-weight:700;">Binary Logic Gate Funnel (2 Inputs &rarr; 1 Output):</span>
+                <span style="color: var(--accent-gold); font-weight:700;">2-Input Logic Gate Funnel:</span>
                 <button class="btn btn-secondary btn-sm btn-add-gate" data-sindex="${index}" data-cindex="${cIndex}">+ Add 2-Input Gate</button>
               </div>
               <div class="gates-list" id="gate-list-${index}-${cIndex}"></div>
             </div>
           ` : ''}
 
-          <!-- Variable Modifiers -->
           <div class="choice-sub-editor">
             <div class="sub-editor-header">
               <span>Variable Modifiers (${choice.actions ? choice.actions.length : 0}):</span>
@@ -700,7 +696,9 @@ class CYOACreator {
           audioFile: null,
           startTime: 0,
           volume: 1.0,
-          persist: false
+          persist: false,
+          conditions: [],
+          gates: []
         });
         this.renderUI();
       };
@@ -994,7 +992,9 @@ class CYOACreator {
           audio: secPath || undefined,
           startTime: sec.startTime,
           volume: sec.volume,
-          persist: sec.persist
+          persist: sec.persist,
+          conditions: sec.conditions || [],
+          gates: sec.gates || []
         });
       });
 
@@ -1592,6 +1592,7 @@ class CYOAPlayerApp {
     setTimeout(() => this.drawFlowchartConnections(svgCanvas, treeWrapper), 60);
   }
 
+  // ACCURATE CHANNEL ROUTING ENGINE FOR FLOWCHART LINES
   drawFlowchartConnections(svg, wrapper) {
     if (!svg || !wrapper) return;
     const wrapperRect = wrapper.getBoundingClientRect();
@@ -1624,10 +1625,24 @@ class CYOAPlayerApp {
           const x2 = (targetRect.left - wrapperRect.left) + wrapper.scrollLeft;
           const y2 = (targetRect.top + targetRect.height / 2 - wrapperRect.top) + wrapper.scrollTop;
 
-          const dx = Math.max(30, Math.abs(x2 - x1) / 2);
+          const radius = 12;
+          const channelX = (x1 + x2) / 2;
+          const dy = y2 >= y1 ? 1 : -1;
+
+          let d = '';
+          if (Math.abs(y2 - y1) < 15) {
+            d = `M ${x1} ${y1} L ${x2} ${y2}`;
+          } else {
+            // Smooth Channel routing with rounded elbows around node boxes
+            d = `M ${x1} ${y1} ` +
+                `L ${channelX - radius} ${y1} ` +
+                `Q ${channelX} ${y1}, ${channelX} ${y1 + radius * dy} ` +
+                `L ${channelX} ${y2 - radius * dy} ` +
+                `Q ${channelX} ${y2}, ${channelX + radius} ${y2} ` +
+                `L ${x2} ${y2}`;
+          }
+
           const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-          const d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
-          
           path.setAttribute('d', d);
           path.setAttribute('class', 'flowchart-connection-line');
           path.setAttribute('data-from', fromId);
@@ -1726,7 +1741,7 @@ class CYOAPlayerApp {
     return { timer, choiceOffset };
   }
 
-  // ACCURATE MULTI-TRACK SECONDARY AUDIO SYNC & SEEKING ENGINE
+  // ACCURATE MULTI-TRACK CONDITIONAL SECONDARY AUDIO SYNC
   syncSecondaryAudio() {
     if (!this.dom.audio || this.activeSecondaryAudioElements.length === 0) return;
     const mainCurTime = this.dom.audio.currentTime || 0;
@@ -1738,13 +1753,20 @@ class CYOAPlayerApp {
       const duration = item.audioEl.duration || 999999;
 
       if (offset >= 0 && offset < duration) {
-        if (Math.abs(item.audioEl.currentTime - offset) > 0.3) {
-          item.audioEl.currentTime = offset;
+        // Evaluate Secondary Sound Variable Conditions
+        const conditionsPassed = this.evalGateTree(item.conditions, item.gates, this.state.variables);
+
+        if (conditionsPassed) {
+          if (Math.abs(item.audioEl.currentTime - offset) > 0.3) {
+            item.audioEl.currentTime = offset;
+          }
+          if (!this.dom.audio.paused && item.audioEl.paused) {
+            item.audioEl.play().catch(() => {});
+          }
+          item.triggered = true;
+        } else {
+          item.audioEl.pause();
         }
-        if (!this.dom.audio.paused && item.audioEl.paused) {
-          item.audioEl.play().catch(() => {});
-        }
-        item.triggered = true;
       } else {
         if (!item.audioEl.paused) {
           item.audioEl.pause();
@@ -1901,6 +1923,8 @@ class CYOAPlayerApp {
             startTime: sec.startTime || 0,
             relativeVolume: relVol,
             persist: Boolean(sec.persist),
+            conditions: sec.conditions || [],
+            gates: sec.gates || [],
             triggered: false
           });
         }
