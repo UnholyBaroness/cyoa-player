@@ -438,8 +438,8 @@ body {
 .flowchart-tree-wrapper {
   position: relative;
   display: flex;
-  gap: 4.5rem;
-  padding: 1rem;
+  gap: 5.5rem; /* Spacious gutter space for clean lines */
+  padding: 1.5rem;
   width: max-content;
   min-width: 100%;
 }
@@ -476,7 +476,7 @@ body {
 .flowchart-column {
   display: flex;
   flex-direction: column;
-  gap: 1.75rem;
+  gap: 2rem;
   z-index: 2;
 }
 
