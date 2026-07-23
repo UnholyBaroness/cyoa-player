@@ -778,7 +778,7 @@ class CYOAPlayerApp {
 
   goBack() {
     if (this.state.history.length > 1) {
-      this.state.history.pop(); // Remove current scene
+      this.state.history.pop();
       const prevSceneId = this.state.history[this.state.history.length - 1];
       this.showToast("Returned to previous scene.", "info");
       this.loadScene(prevSceneId, true);
