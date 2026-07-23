@@ -50,24 +50,6 @@
           </svg>
           Create Story
         </button>
-
-        <button id="btn-demo-story" class="btn btn-secondary" title="Load sample story to test player">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-          </svg>
-          Demo
-        </button>
-
-        <button id="btn-shortcuts" class="btn btn-icon-only" aria-label="Keyboard Shortcuts" title="Keyboard Shortcuts (?)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
-            <line x1="6" y1="8" x2="6.01" y2="8"></line>
-            <line x1="10" y1="8" x2="10.01" y2="8"></line>
-            <line x1="14" y1="8" x2="14.01" y2="8"></line>
-            <line x1="18" y1="8" x2="18.01" y2="8"></line>
-            <line x1="8" y1="12" x2="16" y2="12"></line>
-          </svg>
-        </button>
       </div>
     </div>
   </header>
@@ -111,9 +93,6 @@
           <button id="btn-hero-create" class="btn btn-accent btn-large">
             Create Your Own Story
           </button>
-          <button id="btn-hero-demo" class="btn btn-secondary btn-large">
-            Play Demo Story
-          </button>
         </div>
 
         <div class="feature-badges">
@@ -135,7 +114,11 @@
         </div>
 
         <h1 id="story-title" class="story-title">Story Title</h1>
-        <p id="story-author" class="story-author">by Author Name</p>
+        <div class="story-credits">
+          <span id="story-writer" class="story-credit">Writer: Unknown</span>
+          <span class="credit-separator">•</span>
+          <span id="story-filler" class="story-credit">Filler: Unknown</span>
+        </div>
         <p id="story-description" class="story-description">Description of the loaded audio experience...</p>
       </div>
 
@@ -287,13 +270,17 @@
         <div class="creator-section">
           <h3>1. Story Metadata</h3>
           <div class="form-grid">
-            <div class="form-group">
+            <div class="form-group full-width">
               <label for="create-title">Story Title:</label>
               <input type="text" id="create-title" class="form-input" placeholder="e.g. My Audio Adventure" value="My Audio Adventure" />
             </div>
             <div class="form-group">
-              <label for="create-author">Author Name:</label>
-              <input type="text" id="create-author" class="form-input" placeholder="e.g. Jane Doe" value="Anonymous" />
+              <label for="create-script-writer">Script Writer:</label>
+              <input type="text" id="create-script-writer" class="form-input" placeholder="e.g. Jane Doe" value="Anonymous Writer" />
+            </div>
+            <div class="form-group">
+              <label for="create-script-filler">Script Filler:</label>
+              <input type="text" id="create-script-filler" class="form-input" placeholder="e.g. John Smith" value="Anonymous Filler" />
             </div>
             <div class="form-group full-width">
               <label for="create-description">Story Description:</label>
@@ -321,28 +308,6 @@
           </svg>
           Export & Download .cyoa Package
         </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Keyboard Shortcuts Modal -->
-  <div id="modal-shortcuts" class="modal-overlay hidden" role="dialog" aria-modal="true">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h2>Keyboard Shortcuts</h2>
-        <button id="btn-close-shortcuts" class="btn-close-modal">&times;</button>
-      </div>
-      <div class="modal-body">
-        <ul class="shortcuts-list">
-          <li><kbd>Space</kbd> or <kbd>K</kbd> <span>Play / Pause Audio</span></li>
-          <li><kbd>←</kbd> or <kbd>J</kbd> <span>Rewind 10 Seconds</span></li>
-          <li><kbd>→</kbd> or <kbd>L</kbd> <span>Forward 10 Seconds</span></li>
-          <li><kbd>1</kbd> – <kbd>5</kbd> <span>Select Choice 1 to 5</span></li>
-          <li><kbd>M</kbd> <span>Mute / Unmute Volume</span></li>
-          <li><kbd>R</kbd> <span>Restart Current Scene</span></li>
-          <li><kbd>T</kbd> <span>Toggle Text Transcript</span></li>
-          <li><kbd>?</kbd> <span>Open / Close Shortcuts Help</span></li>
-        </ul>
       </div>
     </div>
   </div>
