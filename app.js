@@ -117,7 +117,8 @@ class CYOAParser {
       throw new Error("'story.json' contains JSON syntax errors.");
     }
     if (!storyData.title) storyData.title = "Untitled CYOA Story";
-    if (!storyData.author) storyData.author = "Unknown Author";
+    if (!storyData.scriptWriter) storyData.scriptWriter = storyData.author || "Unknown Writer";
+    if (!storyData.scriptFiller) storyData.scriptFiller = "Unknown Filler";
     if (!storyData.scenes || typeof storyData.scenes !== 'object') {
       throw new Error("Invalid story structure: 'scenes' object is missing.");
     }
@@ -158,7 +159,7 @@ class CYOAParser {
   }
 }
 
-// 3. STORY CREATOR BUILDER MODULE (Automated Scene IDs & Dropdown Destination Selection)
+// 3. STORY CREATOR BUILDER MODULE
 class CYOACreator {
   constructor(app) {
     this.app = app;
@@ -171,7 +172,6 @@ class CYOACreator {
       {
         id: "scene001",
         title: "The Beginning",
-        transcript: "Welcome to my story. Choose a path ahead.",
         timer: 10,
         timeoutNext: "scene002",
         choiceOffset: 0.5,
@@ -183,7 +183,6 @@ class CYOACreator {
       {
         id: "scene002",
         title: "The Ending",
-        transcript: "Thank you for listening to my story!",
         timer: 0,
         timeoutNext: "",
         choiceOffset: 0,
@@ -211,7 +210,7 @@ class CYOACreator {
       }
     });
   }
-  
+
   renderUI() {
     const container = document.getElementById('creator-scenes-container');
     if (!container) return;
@@ -234,10 +233,6 @@ class CYOACreator {
             <input type="text" class="form-input scene-title-input" value="${scene.title}" data-index="${index}" placeholder="Scene Title" />
           </div>
           <div class="form-group full-width">
-            <label>Transcript / Text:</label>
-            <textarea class="form-input scene-transcript-input" data-index="${index}" placeholder="Narration transcript">${scene.transcript || ''}</textarea>
-          </div>
-          <div class="form-group full-width">
             <label>Audio File (.mp3, .wav, .m4a):</label>
             <input type="file" accept="audio/*" class="form-input scene-audio-input" data-index="${index}" />
             <span class="badge" style="margin-top:4px;">${scene.audioFile ? 'File attached: ' + scene.audioFile.name : 'No audio attached'}</span>
@@ -250,7 +245,6 @@ class CYOACreator {
             <button class="btn btn-secondary btn-sm btn-add-choice" data-index="${index}">+ Add Choice</button>
           </div>
 
-          <!-- Timer & Bell Settings inside the Choices box -->
           <div class="form-grid" style="margin-bottom: 1rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 1rem;">
             <div class="form-group">
               <label>Timer (Seconds, 0 = unlimited):</label>
@@ -271,14 +265,12 @@ class CYOACreator {
             </div>
           </div>
 
-          <!-- Choice buttons list -->
           <div class="choices-list-edit" id="choices-list-edit-${index}"></div>
         </div>
       `;
 
       container.appendChild(card);
 
-      // Render Choice Rows
       const choicesContainer = card.querySelector(`#choices-list-edit-${index}`);
       scene.choices.forEach((choice, cIndex) => {
         const choiceRow = document.createElement('div');
@@ -306,9 +298,6 @@ class CYOACreator {
         this.scenes[e.target.dataset.index].title = e.target.value;
         this.renderUI();
       };
-    });
-    document.querySelectorAll('.scene-transcript-input').forEach(el => {
-      el.onchange = (e) => { this.scenes[e.target.dataset.index].transcript = e.target.value; };
     });
     document.querySelectorAll('.scene-timer-input').forEach(el => {
       el.onchange = (e) => { this.scenes[e.target.dataset.index].timer = parseFloat(e.target.value) || 0; };
@@ -372,7 +361,6 @@ class CYOACreator {
     this.scenes.push({
       id: newId,
       title: "New Scene " + num,
-      transcript: "",
       timer: 0,
       timeoutNext: "",
       choiceOffset: 1.0,
@@ -390,7 +378,8 @@ class CYOACreator {
     }
 
     const title = document.getElementById('create-title').value.trim() || "My Story";
-    const author = document.getElementById('create-author').value.trim() || "Creator";
+    const scriptWriter = document.getElementById('create-script-writer').value.trim() || "Unknown Writer";
+    const scriptFiller = document.getElementById('create-script-filler').value.trim() || "Unknown Filler";
     const description = document.getElementById('create-description').value.trim();
 
     if (this.scenes.length === 0) {
@@ -403,7 +392,8 @@ class CYOACreator {
     const zip = new JSZip();
     const manifest = {
       title,
-      author,
+      scriptWriter,
+      scriptFiller,
       description,
       start: this.scenes[0].id,
       scenes: {}
@@ -422,7 +412,6 @@ class CYOACreator {
       manifest.scenes[scene.id] = {
         title: scene.title,
         audio: audioPath,
-        transcript: scene.transcript,
         timer: scene.timer,
         timeoutNext: scene.timeoutNext || undefined,
         choiceOffset: scene.choiceOffset,
@@ -472,24 +461,19 @@ class CYOAPlayerApp {
       fileInput: document.getElementById('file-input'),
       btnOpenFile: document.getElementById('btn-open-file'),
       btnCreateStory: document.getElementById('btn-create-story'),
-      btnDemoStory: document.getElementById('btn-demo-story'),
-      btnShortcuts: document.getElementById('btn-shortcuts'),
       welcomeScreen: document.getElementById('welcome-screen'),
       playerScreen: document.getElementById('player-screen'),
       btnHeroOpen: document.getElementById('btn-hero-open'),
       btnHeroCreate: document.getElementById('btn-hero-create'),
-      btnHeroDemo: document.getElementById('btn-hero-demo'),
       storyTitle: document.getElementById('story-title'),
-      storyAuthor: document.getElementById('story-author'),
+      storyWriter: document.getElementById('story-writer'),
+      storyFiller: document.getElementById('story-filler'),
       storyDescription: document.getElementById('story-description'),
       statusTag: document.getElementById('story-status-tag'),
       sceneCounter: document.getElementById('scene-counter'),
       sceneImgContainer: document.getElementById('scene-image-container'),
       sceneImg: document.getElementById('scene-image'),
       narrationBanner: document.getElementById('narration-status-banner'),
-      btnToggleTranscript: document.getElementById('btn-toggle-transcript'),
-      transcriptBody: document.getElementById('transcript-body'),
-      transcriptText: document.getElementById('transcript-text'),
       audio: document.getElementById('audio-element'),
       progressBar: document.getElementById('progress-bar'),
       progressFill: document.getElementById('progress-fill'),
@@ -518,8 +502,6 @@ class CYOAPlayerApp {
       btnRestartStory: document.getElementById('btn-restart-story'),
       btnLoadAnother: document.getElementById('btn-load-another'),
       dragDropOverlay: document.getElementById('drag-drop-overlay'),
-      modalShortcuts: document.getElementById('modal-shortcuts'),
-      btnCloseShortcuts: document.getElementById('btn-close-shortcuts'),
       modalCreator: document.getElementById('modal-creator'),
       btnCloseCreator: document.getElementById('btn-close-creator'),
       btnAddScene: document.getElementById('btn-add-scene'),
@@ -551,10 +533,6 @@ class CYOAPlayerApp {
     if (this.dom.btnCloseCreator) this.dom.btnCloseCreator.onclick = () => this.dom.modalCreator.classList.add('hidden');
     if (this.dom.btnAddScene) this.dom.btnAddScene.onclick = () => this.creator.addScene();
     if (this.dom.btnExportCyoa) this.dom.btnExportCyoa.onclick = () => this.creator.exportPackage();
-
-    const loadDemo = () => this.loadDemoStory();
-    if (this.dom.btnDemoStory) this.dom.btnDemoStory.onclick = loadDemo;
-    if (this.dom.btnHeroDemo) this.dom.btnHeroDemo.onclick = loadDemo;
 
     if (this.dom.audio) {
       this.dom.audio.ontimeupdate = () => this.handleAudioTimeUpdate();
@@ -619,19 +597,8 @@ class CYOAPlayerApp {
       };
     }
 
-    if (this.dom.btnToggleTranscript) {
-      this.dom.btnToggleTranscript.onclick = () => {
-        const isExpanded = this.dom.btnToggleTranscript.getAttribute('aria-expanded') === 'true';
-        this.dom.btnToggleTranscript.setAttribute('aria-expanded', !isExpanded);
-        if (this.dom.transcriptBody) this.dom.transcriptBody.classList.toggle('hidden', isExpanded);
-      };
-    }
-
     if (this.dom.btnRestartStory) this.dom.btnRestartStory.onclick = () => this.restartStory();
     if (this.dom.btnLoadAnother) this.dom.btnLoadAnother.onclick = () => triggerFileSelect();
-
-    if (this.dom.btnShortcuts) this.dom.btnShortcuts.onclick = () => this.toggleShortcutsModal(true);
-    if (this.dom.btnCloseShortcuts) this.dom.btnCloseShortcuts.onclick = () => this.toggleShortcutsModal(false);
 
     window.onkeydown = (e) => this.handleGlobalKeyDown(e);
   }
@@ -724,7 +691,6 @@ class CYOAPlayerApp {
     if (this.dom.autoplayBlocker) this.dom.autoplayBlocker.classList.add('hidden');
 
     if (this.dom.sceneCounter) this.dom.sceneCounter.textContent = "Scene: " + (scene.title || sceneId);
-    if (this.dom.transcriptText) this.dom.transcriptText.textContent = scene.transcript || scene.text || "No narration transcript available.";
 
     if (scene.image && this.dom.sceneImg) {
       const imgUrl = await CYOAParser.extractImageBlobUrl(this.zipArchive, scene.image);
@@ -900,7 +866,8 @@ class CYOAPlayerApp {
 
   renderStoryMetadata() {
     if (this.dom.storyTitle) this.dom.storyTitle.textContent = this.storyData.title;
-    if (this.dom.storyAuthor) this.dom.storyAuthor.textContent = "by " + this.storyData.author;
+    if (this.dom.storyWriter) this.dom.storyWriter.textContent = "Writer: " + (this.storyData.scriptWriter || 'Unknown Writer');
+    if (this.dom.storyFiller) this.dom.storyFiller.textContent = "Filler: " + (this.storyData.scriptFiller || 'Unknown Filler');
     if (this.dom.storyDescription) this.dom.storyDescription.textContent = this.storyData.description || 'No description available.';
   }
 
@@ -927,22 +894,9 @@ class CYOAPlayerApp {
     return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
   }
 
-  toggleShortcutsModal(show) {
-    if (this.dom.modalShortcuts) {
-      this.dom.modalShortcuts.classList.toggle('hidden', !show);
-    }
-  }
-
   handleGlobalKeyDown(e) {
     if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
-    if (e.key === '?') {
-      if (this.dom.modalShortcuts) {
-        this.toggleShortcutsModal(this.dom.modalShortcuts.classList.contains('hidden'));
-      }
-      return;
-    }
     if (e.key === 'Escape') {
-      this.toggleShortcutsModal(false);
       if (this.dom.modalCreator) this.dom.modalCreator.classList.add('hidden');
       return;
     }
@@ -961,8 +915,6 @@ class CYOAPlayerApp {
       if (this.dom.btnMute) this.dom.btnMute.click();
     } else if (e.key === 'r' || e.key === 'R') {
       this.restartCurrentScene();
-    } else if (e.key === 't' || e.key === 'T') {
-      if (this.dom.btnToggleTranscript) this.dom.btnToggleTranscript.click();
     }
   }
 
@@ -977,106 +929,6 @@ class CYOAPlayerApp {
       toast.style.transition = 'opacity 0.3s ease';
       setTimeout(() => toast.remove(), 300);
     }, 3500);
-  }
-
-  async loadDemoStory() {
-    this.showToast('Generating demo story package...', 'info');
-    try {
-      if (typeof JSZip === 'undefined') {
-        alert("JSZip is not loaded.");
-        return;
-      }
-      const zip = new JSZip();
-
-      const sampleStoryJson = {
-        title: "The Whispering Cavern",
-        author: "A. Storyteller",
-        description: "An interactive audio story showcasing custom timers and choice offsets.",
-        start: "scene001",
-        scenes: {
-          scene001: {
-            title: "The Cavern Entrance",
-            audio: "audio/scene001.wav",
-            transcript: "You stand before the arching entrance of the ancient cavern.",
-            choiceOffset: 0.5,
-            choices: [
-              { text: "Light a torch and step inside", next: "scene002" },
-              { text: "Follow the narrow ledge", next: "scene003" }
-            ]
-          },
-          scene002: {
-            title: "Into the Deep (Timed Choice!)",
-            audio: "audio/scene002.wav",
-            transcript: "Up ahead, you hear rushing water. You have 8 seconds to make a choice!",
-            timer: 8,
-            choiceOffset: -1.5,
-            timeoutNext: "scene003",
-            choices: [
-              { text: "Follow the echoing water", next: "scene003" },
-              { text: "Investigate warm draft", next: "scene003" }
-            ]
-          },
-          scene003: {
-            title: "The Bioluminescent Chamber",
-            audio: "audio/scene003.wav",
-            transcript: "You emerge into a glowing cavern. You have completed the story!",
-            choices: []
-          }
-        }
-      };
-
-      zip.file("story.json", JSON.stringify(sampleStoryJson, null, 2));
-
-      const audioFolder = zip.folder("audio");
-      audioFolder.file("scene001.wav", this.createToneWavBlob(3.5, 440));
-      audioFolder.file("scene002.wav", this.createToneWavBlob(3.5, 523.25));
-      audioFolder.file("scene003.wav", this.createToneWavBlob(4.0, 659.25));
-
-      const zipBlob = await zip.generateAsync({ type: "blob" });
-      const demoFile = new File([zipBlob], "whispering_cavern.cyoa", { type: "application/zip" });
-
-      await this.loadCyoaFile(demoFile);
-    } catch (err) {
-      console.error(err);
-      this.showToast("Failed to generate demo story.", "error");
-    }
-  }
-
-  createToneWavBlob(durationSec, freq) {
-    const sampleRate = 22050;
-    const numSamples = Math.floor(sampleRate * durationSec);
-    const buffer = new ArrayBuffer(44 + numSamples * 2);
-    const view = new DataView(buffer);
-
-    function writeString(offset, string) {
-      for (let i = 0; i < string.length; i++) {
-        view.setUint8(offset + i, string.charCodeAt(i));
-      }
-    }
-
-    writeString(0, 'RIFF');
-    view.setUint32(4, 36 + numSamples * 2, true);
-    writeString(8, 'WAVE');
-    writeString(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeString(36, 'data');
-    view.setUint32(40, numSamples * 2, true);
-
-    for (let i = 0; i < numSamples; i++) {
-      const t = i / sampleRate;
-      const env = Math.exp(-t / (durationSec * 0.6));
-      const sample = (Math.sin(2 * Math.PI * freq * t) + 0.3 * Math.sin(2 * Math.PI * (freq * 1.5) * t)) * env;
-      const val = Math.max(-1, Math.min(1, sample)) * 32767;
-      view.setInt16(44 + i * 2, val, true);
-    }
-
-    return new Blob([buffer], { type: 'audio/wav' });
   }
 }
 
