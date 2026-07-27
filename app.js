@@ -91,6 +91,63 @@ class SoundEngine {
 
 // 2. PARSER
 class CYOAParser {
+  // Recognizes common "share page" links (which serve an HTML viewer, not the raw
+  // file) and rewrites them to a direct-download URL where that's actually possible.
+  // Browser security (CORS) means this can't be made universal -- a host has to
+  // explicitly allow cross-origin reads of the raw bytes for fetch() to work at all,
+  // regardless of what URL we ask for. Where that's fundamentally not possible
+  // (Mega's links are client-side encrypted and need their own SDK to decrypt),
+  // this says so up front instead of attempting and failing confusingly.
+  static resolveShareLink(rawUrl) {
+    let u;
+    try { u = new URL(rawUrl); } catch (e) { return { url: rawUrl }; }
+    const host = u.hostname.replace(/^www\./, '');
+
+    if (host === 'mega.nz' || host === 'mega.co.nz') {
+      return { unsupported: true, reason: "Mega links are end-to-end encrypted and can only be opened through Mega's own app/SDK -- a direct link fetch can't decrypt the file. Please download it from Mega and use \"Open .cyoa\" instead." };
+    }
+
+    if (host === 'drive.google.com') {
+      let id = null;
+      const m = u.pathname.match(/\/file\/d\/([^/]+)/);
+      if (m) id = m[1];
+      if (!id) id = u.searchParams.get('id');
+      if (id) {
+        return {
+          url: `https://drive.google.com/uc?export=download&id=${id}`,
+          note: "Google Drive link detected — using its direct-download endpoint. Large files or Drive's virus-scan warning page can still block this; if it fails, download the file manually."
+        };
+      }
+    }
+
+    if (host === 'dropbox.com') {
+      u.searchParams.set('dl', '1');
+      return { url: u.toString(), note: "Dropbox link detected — switched to direct-download mode." };
+    }
+
+    if (host === 'github.com') {
+      const m = u.pathname.match(/^\/([^/]+)\/([^/]+)\/blob\/(.+)$/);
+      if (m) return { url: `https://raw.githubusercontent.com/${m[1]}/${m[2]}/${m[3]}`, note: "GitHub link detected — using the raw file endpoint." };
+    }
+
+    if (host === '1drv.ms' || host === 'onedrive.live.com' || host.endsWith('.sharepoint.com')) {
+      return { url: rawUrl, note: "OneDrive link detected — attempting a direct fetch. OneDrive's sharing/CORS settings sometimes block this depending on how the link was shared." };
+    }
+
+    return { url: rawUrl };
+  }
+
+  // Confirms the fetched bytes actually look like a ZIP (".cyoa" files are ZIPs)
+  // rather than, say, an HTML login/share page returned in place of the real file.
+  static async looksLikeZip(blob) {
+    try {
+      const head = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+      return head[0] === 0x50 && head[1] === 0x4B; // 'P' 'K'
+    } catch (e) {
+      return false;
+    }
+  }
+
   static async parsePackage(file) {
     if (typeof JSZip === 'undefined') {
       throw new Error("JSZip library failed to load.");
@@ -132,7 +189,7 @@ class CYOAParser {
     return { storyData, zip };
   }
 
-  static async extractAudioBlobUrl(zip, relativePath) {
+  static findFileEntry(zip, relativePath) {
     if (!relativePath) return null;
     const normalizedPath = relativePath.replace(/\\/g, '/');
     let fileEntry = zip.file(normalizedPath);
@@ -141,9 +198,23 @@ class CYOAParser {
       const matches = zip.file(new RegExp(fileName + '$', 'i'));
       if (matches.length > 0) fileEntry = matches[0];
     }
+    return fileEntry || null;
+  }
+
+  static async extractAudioBlobUrl(zip, relativePath) {
+    const fileEntry = this.findFileEntry(zip, relativePath);
     if (!fileEntry) return null;
     const blob = await fileEntry.async("blob");
     return URL.createObjectURL(blob);
+  }
+
+  // Returns the raw Blob (not an object URL) so it can be re-bundled directly into a
+  // freshly-built zip when exporting -- used to carry existing audio forward when a
+  // story is edited without the user having to re-upload every audio file.
+  static async extractAudioBlob(zip, relativePath) {
+    const fileEntry = this.findFileEntry(zip, relativePath);
+    if (!fileEntry) return null;
+    return fileEntry.async("blob");
   }
 }
 
@@ -212,6 +283,7 @@ class CYOACreator {
         secSounds = sc.secondarySounds.map((s, sIdx) => ({
           id: s.id || ("sec_" + sIdx),
           audioFile: null,
+          existingAudio: s.audio || null,
           startTime: typeof s.startTime === 'number' ? s.startTime : 0,
           volume: typeof s.volume === 'number' ? s.volume : 1.0,
           persist: Boolean(s.persist),
@@ -227,6 +299,7 @@ class CYOACreator {
         timeoutNext: sc.timeoutNext || "",
         choiceOffset: typeof sc.choiceOffset === 'number' ? sc.choiceOffset : 1.0,
         audioFile: null,
+        existingAudio: sc.audio || null,
         secondarySounds: secSounds,
         choices: (sc.choices || []).map(c => ({
           text: c.text,
@@ -242,21 +315,47 @@ class CYOACreator {
   }
 
   reindexScenes() {
+    // Two-phase rename through unique temporary IDs. A naive single-pass rename can
+    // transiently assign a scene the same ID another not-yet-processed scene still
+    // holds (this happens whenever scenes are deleted or reordered), which silently
+    // cross-wires whichever choice referenced that ID first. Routing every rename
+    // through a guaranteed-unique temp ID first removes that possibility entirely.
+    const renameEverywhere = (oldId, newId) => {
+      if (!oldId || oldId === newId) return;
+      this.scenes.forEach(s => {
+        if (s.timeoutNext === oldId) s.timeoutNext = newId;
+        s.choices.forEach(c => { if (c.next === oldId) c.next = newId; });
+      });
+    };
+
+    const originalIds = this.scenes.map(sc => sc.id);
+
     this.scenes.forEach((sc, i) => {
-      const oldId = sc.id;
+      const tempId = "__tmp_scene_" + i + "__";
+      renameEverywhere(originalIds[i], tempId);
+      sc.id = tempId;
+    });
+
+    this.scenes.forEach((sc, i) => {
       const num = i + 1;
       const newId = "scene" + (num < 10 ? "00" + num : (num < 100 ? "0" + num : num));
+      renameEverywhere(sc.id, newId);
       sc.id = newId;
-
-      if (oldId && oldId !== newId) {
-        this.scenes.forEach(s => {
-          if (s.timeoutNext === oldId) s.timeoutNext = newId;
-          s.choices.forEach(c => {
-            if (c.next === oldId) c.next = newId;
-          });
-        });
-      }
     });
+  }
+
+  // Clears any choice/timeout link that points at a scene about to be deleted (instead
+  // of letting reindexScenes() accidentally hand that link to whatever scene inherits
+  // the freed-up ID). Returns how many links were cleared so the creator can be told.
+  clearReferencesToScene(deletedId) {
+    let count = 0;
+    this.scenes.forEach(s => {
+      if (s.timeoutNext === deletedId) { s.timeoutNext = ''; count++; }
+      s.choices.forEach(c => {
+        if (c.next === deletedId) { c.next = ''; count++; }
+      });
+    });
+    return count;
   }
 
   renderUI() {
@@ -301,7 +400,20 @@ class CYOACreator {
     });
 
     container.querySelectorAll('.var-name-input').forEach(el => {
-      el.onchange = (e) => { this.variables[e.target.dataset.vindex].name = e.target.value.trim(); };
+      el.onchange = (e) => {
+        const idx = e.target.dataset.vindex;
+        const newName = e.target.value.trim();
+        const oldName = this.variables[idx].name;
+        if (!newName) { e.target.value = oldName; return; }
+        const dup = this.variables.some((v, i) => String(i) !== String(idx) && v.name === newName);
+        if (dup) {
+          this.app.showToast(`A variable named "${newName}" already exists — pick a different name.`, 'error');
+          e.target.value = oldName;
+          return;
+        }
+        this.variables[idx].name = newName;
+        if (oldName !== newName) this.renameVariableReferences(oldName, newName);
+      };
     });
     container.querySelectorAll('.var-type-select').forEach(el => {
       el.onchange = (e) => {
@@ -323,10 +435,190 @@ class CYOACreator {
     });
     container.querySelectorAll('.btn-delete-var').forEach(el => {
       el.onclick = (e) => {
-        this.variables.splice(e.target.dataset.vindex, 1);
+        const idx = e.target.dataset.vindex;
+        const removedName = this.variables[idx] && this.variables[idx].name;
+        this.variables.splice(idx, 1);
+        const cleared = removedName ? this.clearReferencesToVariable(removedName) : 0;
         this.renderUI();
+        if (cleared > 0) {
+          this.app.showToast(`Deleted "${removedName}". Removed ${cleared} condition/action/gate rule${cleared === 1 ? '' : 's'} that referenced it.`, 'info');
+        }
       };
     });
+  }
+
+  // Updates every condition/action across choices and secondary sounds that referenced
+  // a variable's old name, so renaming a variable doesn't silently orphan its usages.
+  renameVariableReferences(oldName, newName) {
+    const patch = (list) => {
+      (list || []).forEach(entry => {
+        if (entry.var === oldName) entry.var = newName;
+        if (entry.targetType === 'variable' && entry.targetVar === oldName) entry.targetVar = newName;
+      });
+    };
+    this.scenes.forEach(s => {
+      s.choices.forEach(c => { patch(c.conditions); patch(c.actions); });
+      (s.secondarySounds || []).forEach(sec => patch(sec.conditions));
+    });
+  }
+
+  // Removes any condition/action (on choices or secondary sounds) that references a
+  // variable about to be deleted, then drops any gate left pointing at a now-missing
+  // condition so a funnel doesn't silently break. Returns how many rules were removed.
+  clearReferencesToVariable(varName) {
+    let count = 0;
+    const cleanConditionsAndGates = (conditions, gates) => {
+      const withIds = (conditions || []).map((c, idx) => {
+        if (!c.id) c.id = "C" + (idx + 1);
+        return c;
+      });
+      const kept = withIds.filter(c => {
+        const refsVar = c.var === varName || (c.targetType === 'variable' && c.targetVar === varName);
+        if (refsVar) count++;
+        return !refsVar;
+      });
+      const validIds = new Set(kept.map(c => c.id));
+      const keptGates = [];
+      (gates || []).forEach((g, gIdx) => {
+        if (!g.id) g.id = "G" + (gIdx + 1);
+        if (validIds.has(g.inputA) && validIds.has(g.inputB)) {
+          keptGates.push(g);
+          validIds.add(g.id);
+        } else {
+          count++;
+        }
+      });
+      return { conditions: kept, gates: keptGates };
+    };
+
+    this.scenes.forEach(s => {
+      s.choices.forEach(c => {
+        c.actions = (c.actions || []).filter(a => {
+          const refsVar = a.var === varName || (a.targetType === 'variable' && a.targetVar === varName);
+          if (refsVar) count++;
+          return !refsVar;
+        });
+        const cleaned = cleanConditionsAndGates(c.conditions, c.gates);
+        c.conditions = cleaned.conditions;
+        c.gates = cleaned.gates;
+      });
+      (s.secondarySounds || []).forEach(sec => {
+        const cleaned = cleanConditionsAndGates(sec.conditions, sec.gates);
+        sec.conditions = cleaned.conditions;
+        sec.gates = cleaned.gates;
+      });
+    });
+
+    return count;
+  }
+
+  // Builds a label that always reflects the real current state -- new file staged,
+  // existing audio carried over from the loaded package, or nothing attached. Native
+  // file inputs reset their own "Choose File" label whenever the surrounding UI is
+  // re-rendered, so this badge (not the input itself) is the source of truth shown to
+  // the user.
+  audioStatusLabel(entry, prefix) {
+    if (entry.audioFile) return `${prefix}: ${entry.audioFile.name} (new)`;
+    if (entry.existingAudio) return `${prefix}: ${entry.existingAudio.split('/').pop()} (existing)`;
+    return `No ${prefix.toLowerCase()} attached`;
+  }
+
+  // Builds one condition or gate row for a SECONDARY SOUND's "play only if" editor.
+  // Mirrors the choice condition/gate editor's fields and behavior exactly, just
+  // scoped to scene.secondarySounds[secIndex] instead of scene.choices[cIndex], and
+  // kept on its own sec-cond-* / sec-gate-* class names so its event bindings never
+  // collide with the choice editor's.
+  buildRuleRow(kind, item, idx, pos, availableSignalPool) {
+    const row = document.createElement('div');
+    row.className = 'sub-rule-row';
+
+    if (kind === 'condition') {
+      const cond = item;
+      const selectedVarObj = this.variables.find(v => v.name === cond.var) || this.variables[0] || { type: 'float' };
+      const varType = selectedVarObj.type || 'float';
+
+      let opOptions = '';
+      if (varType === 'float') {
+        opOptions = `
+          <option value="==" ${cond.op === '==' ? 'selected' : ''}>Equals (=)</option>
+          <option value="!=" ${cond.op === '!=' ? 'selected' : ''}>Does Not Equal (&ne;)</option>
+          <option value=">" ${cond.op === '>' ? 'selected' : ''}>Greater Than (&gt;)</option>
+          <option value=">=" ${cond.op === '>=' ? 'selected' : ''}>Greater Than or Equal To (&ge;)</option>
+          <option value="<" ${cond.op === '<' ? 'selected' : ''}>Less Than (&lt;)</option>
+          <option value="<=" ${cond.op === '<=' ? 'selected' : ''}>Less Than or Equal To (&le;)</option>
+        `;
+      } else {
+        opOptions = `
+          <option value="==" ${cond.op === '==' ? 'selected' : ''}>Equals (=)</option>
+          <option value="!=" ${cond.op === '!=' ? 'selected' : ''}>Does Not Equal (&ne;)</option>
+        `;
+      }
+
+      let targetSelectOptions = '';
+      const sameTypeVars = this.variables.filter(v => v.type === varType && v.name !== cond.var);
+      sameTypeVars.forEach(v => {
+        targetSelectOptions += `<option value="var:${v.name}" ${cond.targetVar === v.name ? 'selected' : ''}>Variable: ${v.name}</option>`;
+      });
+      if (varType === 'boolean') {
+        targetSelectOptions += `<option value="true" ${cond.value === 'true' || cond.value === true ? 'selected' : ''}>True</option>`;
+        targetSelectOptions += `<option value="false" ${cond.value === 'false' || cond.value === false ? 'selected' : ''}>False</option>`;
+      } else {
+        targetSelectOptions += `<option value="custom" ${cond.targetType === 'custom' || !cond.targetType ? 'selected' : ''}>Custom ${varType === 'float' ? 'Value' : 'Text'}</option>`;
+      }
+
+      const isCustom = cond.targetType === 'custom' || !cond.targetType;
+      let customInputHtml = '';
+      if (varType === 'float' && isCustom) {
+        customInputHtml = `<input type="number" step="any" class="form-input sec-cond-val-input" value="${cond.value !== undefined ? cond.value : ''}" placeholder="Number" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-condindex="${idx}" style="flex:1; min-width:60px;" />`;
+      } else if (varType === 'string' && isCustom) {
+        customInputHtml = `<input type="text" class="form-input sec-cond-val-input" value="${cond.value !== undefined ? cond.value : ''}" placeholder="Text" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-condindex="${idx}" style="flex:1; min-width:60px;" />`;
+      }
+
+      row.innerHTML = `
+        <span class="rule-id-tag">${cond.id || ('C' + (idx + 1))}</span>
+        <select class="form-input sec-cond-unary-select" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-condindex="${idx}" style="width:65px; flex-shrink:0;">
+          <option value="BUFFER" ${(cond.unary || 'BUFFER') === 'BUFFER' ? 'selected' : ''}>If</option>
+          <option value="NOT" ${cond.unary === 'NOT' ? 'selected' : ''}>NOT</option>
+        </select>
+        <select class="form-input sec-cond-var-select" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-condindex="${idx}" style="flex:1.2; min-width:90px;">
+          ${this.variables.map(v => `<option value="${v.name}" ${cond.var === v.name ? 'selected' : ''}>${v.name} (${v.type})</option>`).join('')}
+        </select>
+        <select class="form-input sec-cond-op-select" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-condindex="${idx}" style="flex:1.2; min-width:90px;">
+          ${opOptions}
+        </select>
+        <select class="form-input sec-cond-target-select" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-condindex="${idx}" style="flex:1; min-width:80px;">
+          ${targetSelectOptions}
+        </select>
+        ${customInputHtml}
+        <button class="btn btn-danger btn-sm btn-delete-sec-cond" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-condindex="${idx}">&times;</button>
+      `;
+      return row;
+    }
+
+    // kind === 'gate'
+    const gate = item;
+    const optA = availableSignalPool.map(sig => `<option value="${sig.id}" ${gate.inputA === sig.id ? 'selected' : ''}>Input A: ${sig.label}</option>`).join('');
+    const optB = availableSignalPool.map(sig => `<option value="${sig.id}" ${gate.inputB === sig.id ? 'selected' : ''}>Input B: ${sig.label}</option>`).join('');
+
+    row.innerHTML = `
+      <span class="rule-id-tag">${gate.id || ('G' + (idx + 1))}</span>
+      <select class="form-input sec-gate-type-select" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-gindex="${idx}" style="width:85px; flex-shrink:0;">
+        <option value="AND" ${gate.gateType === 'AND' ? 'selected' : ''}>AND</option>
+        <option value="OR" ${gate.gateType === 'OR' ? 'selected' : ''}>OR</option>
+        <option value="NAND" ${gate.gateType === 'NAND' ? 'selected' : ''}>NAND</option>
+        <option value="NOR" ${gate.gateType === 'NOR' ? 'selected' : ''}>NOR</option>
+        <option value="XOR" ${gate.gateType === 'XOR' ? 'selected' : ''}>XOR</option>
+        <option value="XNOR" ${gate.gateType === 'XNOR' ? 'selected' : ''}>XNOR</option>
+      </select>
+      <select class="form-input sec-gate-in-a-select" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-gindex="${idx}" style="flex:1; min-width:110px;">
+        ${optA}
+      </select>
+      <select class="form-input sec-gate-in-b-select" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-gindex="${idx}" style="flex:1; min-width:110px;">
+        ${optB}
+      </select>
+      <button class="btn btn-danger btn-sm btn-delete-sec-gate" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-gindex="${idx}">&times;</button>
+    `;
+    return row;
   }
 
   renderScenesUI() {
@@ -343,7 +635,11 @@ class CYOACreator {
       card.innerHTML = `
         <div class="scene-edit-header">
           <span class="scene-tag">Scene ${index + 1} (${scene.id})</span>
-          ${this.scenes.length > 1 ? `<button class="btn btn-danger btn-sm btn-delete-scene" data-index="${index}">Delete Scene</button>` : ''}
+          <div class="scene-header-actions">
+            <button class="btn btn-secondary btn-sm btn-move-scene-up" data-index="${index}" title="Move scene earlier" ${index === 0 ? 'disabled' : ''}>&uarr;</button>
+            <button class="btn btn-secondary btn-sm btn-move-scene-down" data-index="${index}" title="Move scene later" ${index === this.scenes.length - 1 ? 'disabled' : ''}>&darr;</button>
+            ${this.scenes.length > 1 ? `<button class="btn btn-danger btn-sm btn-delete-scene" data-index="${index}">Delete Scene</button>` : ''}
+          </div>
         </div>
         <div class="form-grid">
           <div class="form-group full-width">
@@ -353,7 +649,10 @@ class CYOACreator {
           <div class="form-group full-width">
             <label>Primary Audio File (.mp3, .wav, .m4a):</label>
             <input type="file" accept="audio/*" class="form-input scene-audio-input" data-index="${index}" />
-            <span class="badge" style="margin-top:4px;">${scene.audioFile ? 'Primary Audio: ' + scene.audioFile.name : 'No primary audio attached'}</span>
+            <span class="audio-status-row">
+              <span class="badge ${scene.audioFile || scene.existingAudio ? 'badge-audio-ok' : 'badge-audio-none'}">${this.audioStatusLabel(scene, 'Primary audio')}</span>
+              ${(scene.audioFile || scene.existingAudio) ? `<button type="button" class="btn-text-link btn-remove-scene-audio" data-index="${index}">Remove</button>` : ''}
+            </span>
           </div>
         </div>
 
@@ -400,13 +699,18 @@ class CYOACreator {
       // Render Secondary Sound Cards with Conditions
       const secListContainer = card.querySelector(`#sec-sounds-list-${index}`);
       (scene.secondarySounds || []).forEach((secSound, secIdx) => {
+        const secCondCount = secSound.conditions ? secSound.conditions.length : 0;
         const secCard = document.createElement('div');
         secCard.className = 'choice-edit-box';
         secCard.innerHTML = `
           <div class="choice-edit-main-row">
-            <span style="font-size: 0.8rem; font-weight: 700; color: var(--accent-purple);">Sound #${secIdx + 1}</span>
+            <span class="sec-sound-label">Sound #${secIdx + 1}</span>
             <input type="file" accept="audio/*" class="form-input sec-audio-file-input" data-sindex="${index}" data-secindex="${secIdx}" style="flex:2;" />
             <button class="btn btn-danger btn-sm btn-delete-sec-sound" data-sindex="${index}" data-secindex="${secIdx}">&times;</button>
+          </div>
+          <div class="audio-status-row">
+            <span class="badge ${secSound.audioFile || secSound.existingAudio ? 'badge-audio-ok' : 'badge-audio-none'}">${this.audioStatusLabel(secSound, 'Sound audio')}</span>
+            ${(secSound.audioFile || secSound.existingAudio) ? `<button type="button" class="btn-text-link btn-remove-sec-audio" data-sindex="${index}" data-secindex="${secIdx}">Remove</button>` : ''}
           </div>
           <div class="form-grid" style="margin-top:0.4rem;">
             <div class="form-group">
@@ -422,8 +726,49 @@ class CYOACreator {
               <label for="sec-persist-${index}-${secIdx}" style="margin: 0; cursor: pointer;">Persist Audio Across Scenes</label>
             </div>
           </div>
+          <div class="choice-sub-editor">
+            <div class="sub-editor-header">
+              <span>Play Only If (${secCondCount}):</span>
+              <button class="btn btn-secondary btn-sm btn-add-sec-cond" data-sindex="${index}" data-secindex="${secIdx}">+ Condition</button>
+            </div>
+            <div class="conditions-list" id="sec-cond-list-${index}-${secIdx}"></div>
+            ${secCondCount === 0 ? '<div class="empty-hint">No conditions — this sound always plays when its start time is reached.</div>' : ''}
+          </div>
+          ${secCondCount >= 2 ? `
+            <div class="choice-sub-editor" style="border-color: var(--accent-gold);">
+              <div class="sub-editor-header">
+                <span style="color: var(--accent-gold); font-weight:700;">2-Input Logic Gate Funnel:</span>
+                <button class="btn btn-secondary btn-sm btn-add-sec-gate" data-sindex="${index}" data-secindex="${secIdx}">+ Add 2-Input Gate</button>
+              </div>
+              <div class="gates-list" id="sec-gate-list-${index}-${secIdx}"></div>
+            </div>
+          ` : ''}
         `;
         secListContainer.appendChild(secCard);
+
+        const secAvailableSignalPool = [];
+        (secSound.conditions || []).forEach((cd, cIdx) => {
+          const cId = cd.id || ("C" + (cIdx + 1));
+          cd.id = cId;
+          secAvailableSignalPool.push({ id: cId, label: `Condition #${cIdx + 1} (${cId})` });
+        });
+        (secSound.gates || []).forEach((gt, gIdx) => {
+          const gId = gt.id || ("G" + (gIdx + 1));
+          gt.id = gId;
+          secAvailableSignalPool.push({ id: gId, label: `Gate #${gIdx + 1} (${gId})` });
+        });
+
+        const secCondContainer = secCard.querySelector(`#sec-cond-list-${index}-${secIdx}`);
+        (secSound.conditions || []).forEach((cond, condIdx) => {
+          secCondContainer.appendChild(this.buildRuleRow('condition', cond, condIdx, { sindex: index, secindex: secIdx }));
+        });
+
+        const secGateContainer = secCard.querySelector(`#sec-gate-list-${index}-${secIdx}`);
+        if (secGateContainer) {
+          (secSound.gates || []).forEach((gate, gIdx) => {
+            secGateContainer.appendChild(this.buildRuleRow('gate', gate, gIdx, { sindex: index, secindex: secIdx }, secAvailableSignalPool));
+          });
+        }
       });
 
       // Render Choices List
@@ -680,7 +1025,9 @@ class CYOACreator {
     document.querySelectorAll('.scene-audio-input').forEach(el => {
       el.onchange = (e) => {
         if (e.target.files.length > 0) {
-          this.scenes[e.target.dataset.index].audioFile = e.target.files[0];
+          const scene = this.scenes[e.target.dataset.index];
+          scene.audioFile = e.target.files[0];
+          scene.existingAudio = null;
           this.renderUI();
         }
       };
@@ -691,9 +1038,13 @@ class CYOACreator {
       el.onclick = (e) => {
         const sIdx = e.target.dataset.index;
         if (!this.scenes[sIdx].secondarySounds) this.scenes[sIdx].secondarySounds = [];
-        this.scenes[sIdx].secondarySounds.push({
-          id: "sec_" + this.scenes[sIdx].secondarySounds.length,
+        const list = this.scenes[sIdx].secondarySounds;
+        const usedNums = list.map(s => parseInt(String(s.id).replace(/\D/g, ''), 10) || 0);
+        const nextNum = usedNums.length > 0 ? Math.max(...usedNums) + 1 : 0;
+        list.push({
+          id: "sec_" + nextNum,
           audioFile: null,
+          existingAudio: null,
           startTime: 0,
           volume: 1.0,
           persist: false,
@@ -707,9 +1058,29 @@ class CYOACreator {
     document.querySelectorAll('.sec-audio-file-input').forEach(el => {
       el.onchange = (e) => {
         if (e.target.files.length > 0) {
-          this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].audioFile = e.target.files[0];
+          const sec = this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex];
+          sec.audioFile = e.target.files[0];
+          sec.existingAudio = null;
           this.renderUI();
         }
+      };
+    });
+
+    document.querySelectorAll('.btn-remove-scene-audio').forEach(el => {
+      el.onclick = (e) => {
+        const scene = this.scenes[e.target.dataset.index];
+        scene.audioFile = null;
+        scene.existingAudio = null;
+        this.renderUI();
+      };
+    });
+
+    document.querySelectorAll('.btn-remove-sec-audio').forEach(el => {
+      el.onclick = (e) => {
+        const sec = this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex];
+        sec.audioFile = null;
+        sec.existingAudio = null;
+        this.renderUI();
       };
     });
 
@@ -728,6 +1099,84 @@ class CYOACreator {
     document.querySelectorAll('.btn-delete-sec-sound').forEach(el => {
       el.onclick = (e) => {
         this.scenes[e.target.dataset.sindex].secondarySounds.splice(e.target.dataset.secindex, 1);
+        this.renderUI();
+      };
+    });
+
+    // Secondary Sound "Play Only If" condition/gate handlers -- mirrors the choice
+    // condition/gate handlers below, scoped to secondarySounds[secindex] instead.
+    document.querySelectorAll('.btn-add-sec-cond').forEach(el => {
+      el.onclick = (e) => {
+        const sec = this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex];
+        if (!sec.conditions) sec.conditions = [];
+        const newId = "C" + (sec.conditions.length + 1);
+        const firstVar = this.variables[0] ? this.variables[0].name : '';
+        sec.conditions.push({ id: newId, unary: 'BUFFER', var: firstVar, op: '==', targetType: 'custom', value: '' });
+        this.renderUI();
+      };
+    });
+    document.querySelectorAll('.btn-add-sec-gate').forEach(el => {
+      el.onclick = (e) => {
+        const sec = this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex];
+        if (!sec.gates) sec.gates = [];
+        const newId = "G" + (sec.gates.length + 1);
+        const conds = sec.conditions || [];
+        const inA = conds[0] ? conds[0].id : "C1";
+        const inB = conds[1] ? conds[1].id : "C2";
+        sec.gates.push({ id: newId, gateType: 'AND', inputA: inA, inputB: inB });
+        this.renderUI();
+      };
+    });
+    document.querySelectorAll('.sec-cond-unary-select').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].conditions[e.target.dataset.condindex].unary = e.target.value; };
+    });
+    document.querySelectorAll('.sec-cond-var-select').forEach(el => {
+      el.onchange = (e) => {
+        const cond = this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].conditions[e.target.dataset.condindex];
+        cond.var = e.target.value;
+        this.renderUI();
+      };
+    });
+    document.querySelectorAll('.sec-cond-op-select').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].conditions[e.target.dataset.condindex].op = e.target.value; };
+    });
+    document.querySelectorAll('.sec-cond-target-select').forEach(el => {
+      el.onchange = (e) => {
+        const cond = this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].conditions[e.target.dataset.condindex];
+        const val = e.target.value;
+        if (val.startsWith('var:')) {
+          cond.targetType = 'variable';
+          cond.targetVar = val.substring(4);
+        } else if (val === 'true' || val === 'false') {
+          cond.targetType = 'custom';
+          cond.value = (val === 'true');
+        } else {
+          cond.targetType = 'custom';
+        }
+        this.renderUI();
+      };
+    });
+    document.querySelectorAll('.sec-cond-val-input').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].conditions[e.target.dataset.condindex].value = e.target.value; };
+    });
+    document.querySelectorAll('.btn-delete-sec-cond').forEach(el => {
+      el.onclick = (e) => {
+        this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].conditions.splice(e.target.dataset.condindex, 1);
+        this.renderUI();
+      };
+    });
+    document.querySelectorAll('.sec-gate-type-select').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].gates[e.target.dataset.gindex].gateType = e.target.value; };
+    });
+    document.querySelectorAll('.sec-gate-in-a-select').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].gates[e.target.dataset.gindex].inputA = e.target.value; };
+    });
+    document.querySelectorAll('.sec-gate-in-b-select').forEach(el => {
+      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].gates[e.target.dataset.gindex].inputB = e.target.value; };
+    });
+    document.querySelectorAll('.btn-delete-sec-gate').forEach(el => {
+      el.onclick = (e) => {
+        this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].gates.splice(e.target.dataset.gindex, 1);
         this.renderUI();
       };
     });
@@ -895,15 +1344,62 @@ class CYOACreator {
 
     document.querySelectorAll('.btn-delete-scene').forEach(el => {
       el.onclick = (e) => {
-        this.scenes.splice(e.target.dataset.index, 1);
+        const idx = parseInt(e.target.dataset.index, 10);
+        const removedId = this.scenes[idx] && this.scenes[idx].id;
+        this.scenes.splice(idx, 1);
+        const cleared = removedId ? this.clearReferencesToScene(removedId) : 0;
         this.reindexScenes();
+        this.renderUI();
+        if (cleared > 0) {
+          this.app.showToast(`Deleted scene. Cleared ${cleared} choice/timeout link${cleared === 1 ? '' : 's'} that pointed to it — look for "-- Target Scene --" to reassign ${cleared === 1 ? 'it' : 'them'}.`, 'info');
+        }
+      };
+    });
+
+    document.querySelectorAll('.btn-move-scene-up').forEach(el => {
+      el.onclick = (e) => {
+        const idx = parseInt(e.target.dataset.index, 10);
+        if (idx <= 0) return;
+        [this.scenes[idx - 1], this.scenes[idx]] = [this.scenes[idx], this.scenes[idx - 1]];
+        this.reindexScenes();
+        this.renderUI();
+      };
+    });
+    document.querySelectorAll('.btn-move-scene-down').forEach(el => {
+      el.onclick = (e) => {
+        const idx = parseInt(e.target.dataset.index, 10);
+        if (idx >= this.scenes.length - 1) return;
+        [this.scenes[idx], this.scenes[idx + 1]] = [this.scenes[idx + 1], this.scenes[idx]];
+        this.reindexScenes();
+        this.renderUI();
+      };
+    });
+
+    document.querySelectorAll('.btn-move-choice-up').forEach(el => {
+      el.onclick = (e) => {
+        const s = e.target.dataset.sindex, cIdx = parseInt(e.target.dataset.cindex, 10);
+        if (cIdx <= 0) return;
+        const arr = this.scenes[s].choices;
+        [arr[cIdx - 1], arr[cIdx]] = [arr[cIdx], arr[cIdx - 1]];
+        this.renderUI();
+      };
+    });
+    document.querySelectorAll('.btn-move-choice-down').forEach(el => {
+      el.onclick = (e) => {
+        const s = e.target.dataset.sindex, cIdx = parseInt(e.target.dataset.cindex, 10);
+        const arr = this.scenes[s].choices;
+        if (cIdx >= arr.length - 1) return;
+        [arr[cIdx], arr[cIdx + 1]] = [arr[cIdx + 1], arr[cIdx]];
         this.renderUI();
       };
     });
   }
 
   addVariable() {
-    this.variables.push({ name: "newVar" + (this.variables.length + 1), type: "float", default: 0 });
+    let n = this.variables.length + 1;
+    let name = "newVar" + n;
+    while (this.variables.some(v => v.name === name)) { n++; name = "newVar" + n; }
+    this.variables.push({ name, type: "float", default: 0 });
     this.renderUI();
   }
 
@@ -917,6 +1413,7 @@ class CYOACreator {
       timeoutNext: "",
       choiceOffset: 1.0,
       audioFile: null,
+      existingAudio: null,
       secondarySounds: [],
       choices: []
     });
@@ -971,21 +1468,41 @@ class CYOACreator {
 
     const audioFolder = zip.folder("audio");
 
+    let carriedOverCount = 0;
+
     for (let scene of this.scenes) {
       let audioPath = "";
       if (scene.audioFile) {
         const ext = scene.audioFile.name.split('.').pop();
         audioPath = "audio/" + scene.id + "." + ext;
         audioFolder.file(scene.id + "." + ext, scene.audioFile);
+      } else if (scene.existingAudio && this.app.zipArchive) {
+        const bytes = await CYOAParser.extractAudioBlob(this.app.zipArchive, scene.existingAudio);
+        if (bytes) {
+          const ext = scene.existingAudio.split('.').pop() || 'mp3';
+          audioPath = "audio/" + scene.id + "." + ext;
+          audioFolder.file(scene.id + "." + ext, bytes);
+          carriedOverCount++;
+        }
       }
 
       const secSoundsManifest = [];
-      (scene.secondarySounds || []).forEach((sec, idx) => {
+      const secSounds = scene.secondarySounds || [];
+      for (let idx = 0; idx < secSounds.length; idx++) {
+        const sec = secSounds[idx];
         let secPath = "";
         if (sec.audioFile) {
           const ext = sec.audioFile.name.split('.').pop();
           secPath = "audio/" + scene.id + "_sec" + idx + "." + ext;
           audioFolder.file(scene.id + "_sec" + idx + "." + ext, sec.audioFile);
+        } else if (sec.existingAudio && this.app.zipArchive) {
+          const bytes = await CYOAParser.extractAudioBlob(this.app.zipArchive, sec.existingAudio);
+          if (bytes) {
+            const ext = sec.existingAudio.split('.').pop() || 'mp3';
+            secPath = "audio/" + scene.id + "_sec" + idx + "." + ext;
+            audioFolder.file(scene.id + "_sec" + idx + "." + ext, bytes);
+            carriedOverCount++;
+          }
         }
         secSoundsManifest.push({
           id: sec.id || ("sec_" + idx),
@@ -996,7 +1513,7 @@ class CYOACreator {
           conditions: sec.conditions || [],
           gates: sec.gates || []
         });
-      });
+      }
 
       manifest.scenes[scene.id] = {
         title: scene.title,
@@ -1019,7 +1536,8 @@ class CYOACreator {
     link.download = title.toLowerCase().replace(/[^a-z0-9]/g, '_') + ".cyoa";
     link.click();
 
-    this.app.showToast("Export complete! .cyoa file downloaded.", "success");
+    const carryNote = carriedOverCount > 0 ? ` (${carriedOverCount} existing audio file${carriedOverCount === 1 ? '' : 's'} carried over)` : '';
+    this.app.showToast("Export complete! .cyoa file downloaded." + carryNote, "success");
   }
 }
 
@@ -1037,11 +1555,13 @@ class CYOAPlayerApp {
     this.timedChoiceInterval = null;
     this.choicesRevealed = false;
     this.activeSecondaryAudioElements = [];
+    this.lastNonZeroVolume = 1;
 
     try {
       this.initDOMReferences();
       this.creator = new CYOACreator(this);
       this.initEventListeners();
+      this.loadPrefs();
       this.checkUrlQueryParams();
       console.log("CYOAPlayerApp initialized.");
     } catch (err) {
@@ -1114,7 +1634,16 @@ class CYOAPlayerApp {
       btnCloseFlowchart: document.getElementById('btn-close-flowchart'),
       flowchartContent: document.getElementById('flowchart-content'),
       btnToggleFlowchartLines: document.getElementById('btn-toggle-flowchart-lines'),
-      toastContainer: document.getElementById('toast-container')
+      toastContainer: document.getElementById('toast-container'),
+      btnToggleTheme: document.getElementById('btn-toggle-theme'),
+      iconThemeLight: document.getElementById('icon-theme-light'),
+      iconThemeDark: document.getElementById('icon-theme-dark'),
+      btnShortcuts: document.getElementById('btn-shortcuts'),
+      modalShortcuts: document.getElementById('modal-shortcuts'),
+      btnCloseShortcuts: document.getElementById('btn-close-shortcuts'),
+      btnZoomIn: document.getElementById('btn-flowchart-zoom-in'),
+      btnZoomOut: document.getElementById('btn-flowchart-zoom-out'),
+      btnZoomReset: document.getElementById('btn-flowchart-zoom-reset')
     };
   }
 
@@ -1185,8 +1714,12 @@ class CYOAPlayerApp {
 
         this.dom.btnToggleFlowchartLines.textContent = "Lines: " + this.settings.flowchartLineMode.toUpperCase();
         this.renderFlowchart();
+        this.savePrefs();
       };
     }
+    if (this.dom.btnZoomIn) this.dom.btnZoomIn.onclick = () => this.setFlowchartZoom((this.flowchartZoom || 1) + 0.15);
+    if (this.dom.btnZoomOut) this.dom.btnZoomOut.onclick = () => this.setFlowchartZoom((this.flowchartZoom || 1) - 0.15);
+    if (this.dom.btnZoomReset) this.dom.btnZoomReset.onclick = () => this.setFlowchartZoom(1);
 
     if (this.dom.btnCloseCreator) this.dom.btnCloseCreator.onclick = () => this.dom.modalCreator.classList.add('hidden');
     if (this.dom.btnAddVariable) this.dom.btnAddVariable.onclick = () => this.creator.addVariable();
@@ -1244,6 +1777,15 @@ class CYOAPlayerApp {
     if (this.dom.btnSkipForward) this.dom.btnSkipForward.onclick = () => this.seekRelative(10);
     if (this.dom.btnRestartScene) this.dom.btnRestartScene.onclick = () => this.restartCurrentScene();
     if (this.dom.btnToggleBell) this.dom.btnToggleBell.onclick = () => this.toggleBellSetting();
+    if (this.dom.btnToggleTheme) this.dom.btnToggleTheme.onclick = () => this.toggleTheme();
+    if (this.dom.btnShortcuts) {
+      this.dom.btnShortcuts.onclick = () => {
+        if (this.dom.modalShortcuts) this.dom.modalShortcuts.classList.remove('hidden');
+      };
+    }
+    if (this.dom.btnCloseShortcuts) {
+      this.dom.btnCloseShortcuts.onclick = () => this.dom.modalShortcuts.classList.add('hidden');
+    }
 
     if (this.dom.progressBar) {
       this.dom.progressBar.oninput = (e) => {
@@ -1267,6 +1809,7 @@ class CYOAPlayerApp {
     if (this.dom.volumeSlider) {
       this.dom.volumeSlider.oninput = (e) => {
         const val = parseFloat(e.target.value);
+        if (val > 0) this.lastNonZeroVolume = val;
         if (this.dom.audio) {
           this.dom.audio.volume = val;
           this.dom.audio.muted = (val === 0);
@@ -1274,17 +1817,27 @@ class CYOAPlayerApp {
         this.syncSecondaryVolumes();
         this.updateVolumeProgress(val);
         this.updateVolumeIcons(val === 0);
+        this.savePrefs();
       };
     }
 
     if (this.dom.btnMute) {
       this.dom.btnMute.onclick = () => {
         if (this.dom.audio) {
-          this.dom.audio.muted = !this.dom.audio.muted;
-          const currentVal = this.dom.audio.muted ? 0 : (this.dom.audio.volume || 1);
+          const willMute = !this.dom.audio.muted;
+          this.dom.audio.muted = willMute;
+          // Un-muting when the actual volume is 0 (e.g. the slider was dragged all the
+          // way down, which auto-mutes) used to just report "full volume" visually
+          // without ever restoring a real, audible volume. Restore one explicitly.
+          if (!willMute && this.dom.audio.volume === 0) {
+            this.dom.audio.volume = this.lastNonZeroVolume > 0 ? this.lastNonZeroVolume : 1;
+          }
+          const currentVal = this.dom.audio.muted ? 0 : this.dom.audio.volume;
+          if (this.dom.volumeSlider) this.dom.volumeSlider.value = currentVal;
           this.syncSecondaryVolumes();
           this.updateVolumeProgress(currentVal);
           this.updateVolumeIcons(this.dom.audio.muted);
+          this.savePrefs();
         }
       };
     }
@@ -1443,8 +1996,18 @@ class CYOAPlayerApp {
   // --- FLOWCHART MODAL METHODS WITH GUTTER ROUTING & CARD HOVER RESTORATION ---
   openFlowchartModal() {
     if (!this.storyData) return;
+    if (typeof this.flowchartZoom !== 'number') this.flowchartZoom = 1;
     this.renderFlowchart();
     if (this.dom.modalFlowchart) this.dom.modalFlowchart.classList.remove('hidden');
+  }
+
+  setFlowchartZoom(z) {
+    this.flowchartZoom = Math.max(0.55, Math.min(1.3, Math.round(z * 100) / 100));
+    if (this.flowchartWrapperEl) {
+      this.flowchartWrapperEl.style.setProperty('--fc-scale', this.flowchartZoom);
+      requestAnimationFrame(() => requestAnimationFrame(() => this.drawFlowchartConnections(this.flowchartSvgEl, this.flowchartWrapperEl)));
+    }
+    if (this.dom.btnZoomReset) this.dom.btnZoomReset.textContent = Math.round(this.flowchartZoom * 100) + "%";
   }
 
   renderFlowchart() {
@@ -1462,36 +2025,39 @@ class CYOAPlayerApp {
     const scenes = this.storyData.scenes;
     const startId = this.storyData.start;
     const currentId = this.currentSceneId;
+    const allKeys = Object.keys(scenes);
 
+    // --- Rank assignment: BFS shortest-path distance from Start ---
     const levels = {};
     const queue = [{ id: startId, level: 0 }];
     const visited = new Set();
+    const predecessors = {};
+    allKeys.forEach(k => predecessors[k] = []);
+    const addEdge = (from, to) => { if (to && scenes[to]) predecessors[to].push(from); };
+    allKeys.forEach(id => {
+      const sc = scenes[id];
+      if (sc.timeoutNext) addEdge(id, sc.timeoutNext);
+      (sc.choices || []).forEach(c => addEdge(id, c.next));
+    });
 
     while (queue.length > 0) {
       const { id, level } = queue.shift();
       if (visited.has(id)) continue;
       visited.add(id);
       levels[id] = Math.max(levels[id] || 0, level);
-
       const sc = scenes[id];
       if (sc) {
-        if (sc.timeoutNext && !visited.has(sc.timeoutNext)) {
-          queue.push({ id: sc.timeoutNext, level: level + 1 });
-        }
-        (sc.choices || []).forEach(c => {
-          if (c.next && !visited.has(c.next)) {
-            queue.push({ id: c.next, level: level + 1 });
-          }
-        });
+        if (sc.timeoutNext && !visited.has(sc.timeoutNext)) queue.push({ id: sc.timeoutNext, level: level + 1 });
+        (sc.choices || []).forEach(c => { if (c.next && !visited.has(c.next)) queue.push({ id: c.next, level: level + 1 }); });
       }
     }
 
-    const allKeys = Object.keys(scenes);
-    const maxLevel = Math.max(...Object.values(levels), 0);
+    const reachableLevels = Object.values(levels);
+    const maxReachableLevel = reachableLevels.length ? Math.max(...reachableLevels) : 0;
+    const unreachableLevel = maxReachableLevel + 1;
+    let hasUnreachable = false;
     allKeys.forEach(key => {
-      if (levels[key] === undefined) {
-        levels[key] = maxLevel + 1;
-      }
+      if (levels[key] === undefined) { levels[key] = unreachableLevel; hasUnreachable = true; }
     });
 
     const levelGroups = {};
@@ -1500,13 +2066,34 @@ class CYOAPlayerApp {
       if (!levelGroups[lvl]) levelGroups[lvl] = [];
       levelGroups[lvl].push(key);
     });
+    const sortedLevels = Object.keys(levelGroups).map(Number).sort((a, b) => a - b);
+    if (levelGroups[0]) levelGroups[0].sort((a, b) => (a === startId ? -1 : b === startId ? 1 : 0));
+
+    // --- Barycenter pass: order each rank near the average position of its
+    // predecessors in the immediately preceding rank, to cut down crossing lines. ---
+    const positionIndex = {};
+    sortedLevels.forEach(lvl => levelGroups[lvl].forEach((id, i) => { positionIndex[id] = i; }));
+    for (let li = 1; li < sortedLevels.length; li++) {
+      const lvl = sortedLevels[li];
+      const prevSet = new Set(levelGroups[sortedLevels[li - 1]]);
+      const withKeys = levelGroups[lvl].map((id, originalIdx) => {
+        const preds = predecessors[id].filter(p => prevSet.has(p));
+        const key = preds.length > 0
+          ? preds.reduce((sum, p) => sum + positionIndex[p], 0) / preds.length
+          : (originalIdx + 1000);
+        return { id, key };
+      });
+      withKeys.sort((a, b) => a.key - b.key);
+      levelGroups[lvl] = withKeys.map(w => w.id);
+      levelGroups[lvl].forEach((id, i) => { positionIndex[id] = i; });
+    }
 
     const treeWrapper = document.createElement('div');
     treeWrapper.className = 'flowchart-tree-wrapper';
+    treeWrapper.style.setProperty('--fc-scale', this.flowchartZoom || 1);
 
     const svgCanvas = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svgCanvas.setAttribute('class', 'flowchart-svg-canvas');
-
     svgCanvas.innerHTML = `
       <defs>
         <marker id="flowchart-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -1514,15 +2101,19 @@ class CYOAPlayerApp {
         </marker>
       </defs>
     `;
-
     treeWrapper.appendChild(svgCanvas);
-
-    const sortedLevels = Object.keys(levelGroups).map(Number).sort((a, b) => a - b);
 
     sortedLevels.forEach(lvl => {
       const column = document.createElement('div');
       column.className = 'flowchart-column';
       column.dataset.colLevel = lvl;
+
+      if (hasUnreachable && lvl === unreachableLevel) {
+        const label = document.createElement('div');
+        label.className = 'flowchart-unreachable-label';
+        label.textContent = 'Not reachable from Start';
+        column.appendChild(label);
+      }
 
       levelGroups[lvl].forEach(sceneId => {
         const sc = scenes[sceneId];
@@ -1536,21 +2127,28 @@ class CYOAPlayerApp {
         let secAudioBadge = '';
         const secSounds = sc.secondarySounds || [];
         if (secSounds.length > 0) {
-          secAudioBadge = `<div class="flowchart-sec-badge">🎵 Overlaid Sounds (${secSounds.length})</div>`;
+          const secConditionPills = secSounds
+            .map(s => (s.conditions && s.conditions.length > 0)
+              ? `<div class="flowchart-cond-pill">🔒 Sound plays if: ${s.conditions.map(cd => `${cd.unary === 'NOT' ? 'NOT ' : ''}${cd.var} ${cd.op} ${cd.targetType === 'variable' ? cd.targetVar : cd.value}`).join(' & ')}</div>`
+              : '')
+            .join('');
+          secAudioBadge = `<div class="flowchart-sec-badge">🎵 Overlaid Sounds (${secSounds.length})</div>${secConditionPills}`;
         }
 
         let choicesHtml = '';
         if (sc.choices && sc.choices.length > 0) {
           choicesHtml = sc.choices.map((c, idx) => {
-            let condText = (c.conditions && c.conditions.length > 0) ? `<div class="flowchart-cond-pill">🔒 Req: ${c.conditions.map(cd => `${cd.unary === 'NOT' ? 'NOT ' : ''}${cd.var} ${cd.op} ${cd.targetType === 'variable' ? cd.targetVar : cd.value}`).join(' & ')}</div>` : '';
-            let actText = (c.actions && c.actions.length > 0) ? `<div class="flowchart-act-pill">⚡ ${c.actions.map(a => `${a.var} ${a.op} ${a.targetType === 'variable' ? a.targetVar : a.value}`).join(', ')}</div>` : '';
+            const condText = (c.conditions && c.conditions.length > 0) ? `<div class="flowchart-cond-pill">🔒 Req: ${c.conditions.map(cd => `${cd.unary === 'NOT' ? 'NOT ' : ''}${cd.var} ${cd.op} ${cd.targetType === 'variable' ? cd.targetVar : cd.value}`).join(' & ')}</div>` : '';
+            const actText = (c.actions && c.actions.length > 0) ? `<div class="flowchart-act-pill">⚡ ${c.actions.map(a => `${a.var} ${a.op} ${a.targetType === 'variable' ? a.targetVar : a.value}`).join(', ')}</div>` : '';
+            const isBroken = c.next && !scenes[c.next];
+            const targetLabel = !c.next ? 'End' : (isBroken ? c.next + ' (missing!)' : (scenes[c.next].title || c.next));
 
             return `
-              <div class="flowchart-choice-item" data-from="${sceneId}" data-target="${c.next || ''}" data-choice-index="${idx}">
+              <div class="flowchart-choice-item ${isBroken ? 'choice-broken' : ''}" data-from="${sceneId}" data-target="${c.next || ''}" data-choice-index="${idx}">
                 <div class="choice-main-line">
                   <span class="choice-num">${idx + 1}</span>
                   <span class="choice-label">${c.text}</span>
-                  <span class="choice-arrow">&rarr; ${c.next || 'End'}</span>
+                  <span class="choice-arrow">&rarr; ${targetLabel}</span>
                 </div>
                 ${condText}
                 ${actText}
@@ -1581,6 +2179,8 @@ class CYOAPlayerApp {
     });
 
     container.appendChild(treeWrapper);
+    this.flowchartWrapperEl = treeWrapper;
+    this.flowchartSvgEl = svgCanvas;
 
     container.querySelectorAll('.btn-jump-scene').forEach(btn => {
       btn.onclick = (e) => {
@@ -1590,14 +2190,22 @@ class CYOAPlayerApp {
       };
     });
 
-    setTimeout(() => this.drawFlowchartConnections(svgCanvas, treeWrapper), 60);
+    // Two rAFs (rather than a guessed setTimeout delay) reliably wait for layout to
+    // settle before measuring card positions, regardless of device/render speed.
+    requestAnimationFrame(() => requestAnimationFrame(() => this.drawFlowchartConnections(svgCanvas, treeWrapper)));
+
+    if (typeof ResizeObserver !== 'undefined') {
+      if (this.flowchartResizeObserver) this.flowchartResizeObserver.disconnect();
+      this.flowchartResizeObserver = new ResizeObserver(() => this.drawFlowchartConnections(svgCanvas, treeWrapper));
+      this.flowchartResizeObserver.observe(treeWrapper);
+    }
   }
 
-  // GUTTER-BASED ZERO-OVERLAP ROUTING ENGINE & CARD DEFAULT TIMEOUT HOVER HIGHLIGHTING
+  // GUTTER-BASED ROUTING ENGINE & CARD DEFAULT TIMEOUT HOVER HIGHLIGHTING
   drawFlowchartConnections(svg, wrapper) {
     if (!svg || !wrapper) return;
     const wrapperRect = wrapper.getBoundingClientRect();
-    
+
     svg.setAttribute('width', wrapper.scrollWidth);
     svg.setAttribute('height', wrapper.scrollHeight);
 
@@ -1609,12 +2217,13 @@ class CYOAPlayerApp {
     const cardMap = {};
     sceneCards.forEach(c => cardMap[c.dataset.sceneId] = c);
 
+    let laneCounter = 0;
+
     sceneCards.forEach(card => {
       const fromId = card.dataset.sceneId;
       const sceneObj = this.storyData.scenes[fromId];
       const choiceItems = card.querySelectorAll('.flowchart-choice-item');
 
-      // Determine default timeout target for Card Hovering
       let defaultTargetId = sceneObj ? sceneObj.timeoutNext : null;
       if (!defaultTargetId && sceneObj && sceneObj.choices && sceneObj.choices[0]) {
         defaultTargetId = sceneObj.choices[0].next;
@@ -1639,18 +2248,23 @@ class CYOAPlayerApp {
 
           const x1 = (itemRect.right - wrapperRect.left) + wrapper.scrollLeft;
           const y1 = (itemRect.top + itemRect.height / 2 - wrapperRect.top) + wrapper.scrollTop;
-          
+
           let x2 = cB_left;
           const y2 = (targetRect.top + 25 - wrapperRect.top) + wrapper.scrollTop;
 
           const radius = 10;
           let d = '';
 
-          // Target is to the LEFT or BACKWARD link (e.g. Green lines in Images 8 & 9)
+          // Small rotating per-edge lane offset so lines sharing the same gutter
+          // fan out slightly instead of drawing exactly on top of one another.
+          const lane = laneCounter % 5;
+          laneCounter++;
+          const laneOffset = (lane - 2) * 9;
+
+          // Target is to the LEFT or a BACKWARD link
           if (cB_left < cA_left - 30) {
-            const topMarginY = 25;
-            const startX = cA_left - 15;
-            
+            const topMarginY = 25 + Math.abs(laneOffset);
+
             d = `M ${x1} ${y1} ` +
                 `L ${cA_right + 15 - radius} ${y1} ` +
                 `Q ${cA_right + 15} ${y1}, ${cA_right + 15} ${y1 - radius} ` +
@@ -1662,9 +2276,9 @@ class CYOAPlayerApp {
                 `Q ${cB_left - 15} ${y2}, ${cB_left - 15 + radius} ${y2} ` +
                 `L ${cB_left} ${y2}`;
           }
-          // Target is in SAME COLUMN (e.g. Green lines in Image 7)
+          // Target is in the SAME COLUMN
           else if (Math.abs(cB_left - cA_left) < 30) {
-            const rightGutterX = cA_right + 25;
+            const rightGutterX = cA_right + 25 + laneOffset;
             const dy = y2 >= y1 ? 1 : -1;
 
             d = `M ${x1} ${y1} ` +
@@ -1677,7 +2291,7 @@ class CYOAPlayerApp {
           }
           // Forward link to a RIGHT column
           else {
-            const channelX = cA_right + (cB_left - cA_right) / 2;
+            const channelX = cA_right + (cB_left - cA_right) / 2 + laneOffset;
             const dy = y2 >= y1 ? 1 : -1;
 
             if (Math.abs(y2 - y1) < 12) {
@@ -1706,7 +2320,6 @@ class CYOAPlayerApp {
 
           svg.appendChild(path);
 
-          // Individual Choice Hover Handler
           item.onmouseenter = (e) => {
             e.stopPropagation();
             svg.querySelectorAll(`path[data-from="${fromId}"]`).forEach(p => {
@@ -1723,8 +2336,6 @@ class CYOAPlayerApp {
             if (this.settings.flowchartLineMode === 'hover') {
               path.style.display = 'none';
             }
-
-            // RESTORE DEFAULT TIMEOUT HOVER IF MOUSE REMAINS INSIDE CARD
             if (card.contains(e.relatedTarget) && defaultTargetId) {
               const defaultPath = svg.querySelector(`path[data-from="${fromId}"][data-to="${defaultTargetId}"]`);
               if (defaultPath) {
@@ -1736,7 +2347,6 @@ class CYOAPlayerApp {
         }
       });
 
-      // Card Hover Handler: Highlights ONLY default timeout choice arrow
       card.onmouseenter = () => {
         svg.querySelectorAll(`path[data-from="${fromId}"]`).forEach(p => {
           p.classList.remove('line-highlight');
@@ -1772,19 +2382,32 @@ class CYOAPlayerApp {
   }
 
   async loadCyoaFromUrl(url) {
+    const resolved = CYOAParser.resolveShareLink(url);
+    if (resolved.unsupported) {
+      this.showToast(resolved.reason, 'error');
+      return;
+    }
+    if (resolved.note) this.showToast(resolved.note, 'info');
     this.showToast("Fetching story package from URL...", "info");
     try {
-      const response = await fetch(url);
+      const response = await fetch(resolved.url);
       if (!response.ok) {
         throw new Error("HTTP " + response.status + ": " + response.statusText);
       }
       const blob = await response.blob();
+      if (!(await CYOAParser.looksLikeZip(blob))) {
+        throw new Error("That link didn't return a .cyoa/zip file — the host may require login, block direct downloads, or the link may point to a share page rather than the file itself. Try downloading it manually and using \"Open .cyoa\" instead.");
+      }
       const filename = url.split('/').pop().split('?')[0] || "downloaded_story.cyoa";
       const file = new File([blob], filename, { type: "application/zip" });
       await this.loadCyoaFile(file);
     } catch (err) {
       console.error(err);
-      this.showToast("Failed to fetch story from URL: " + err.message, "error");
+      const isNetworkErr = err instanceof TypeError;
+      const msg = isNetworkErr
+        ? "Couldn't reach that link. It may not allow direct downloads from other websites (a CORS restriction the host controls, not something this app can override), or the link may be private/expired."
+        : err.message;
+      this.showToast("Failed to load story from URL: " + msg, "error");
     }
   }
 
@@ -1914,6 +2537,74 @@ class CYOAPlayerApp {
         this.showToast("Decision chime sound disabled.", "info");
       }
     }
+    this.savePrefs();
+  }
+
+  // --- PREFERENCES (theme, volume, speed, bell) persisted across sessions ---
+  loadPrefs() {
+    let prefs = {};
+    try {
+      const raw = localStorage.getItem('cyoa-prefs');
+      if (raw) prefs = JSON.parse(raw) || {};
+    } catch (e) { /* localStorage unavailable (private browsing, etc.) -- fall back to defaults */ }
+
+    if (typeof prefs.bellEnabled === 'boolean') this.settings.bellEnabled = prefs.bellEnabled;
+    if (typeof prefs.flowchartLineMode === 'string') this.settings.flowchartLineMode = prefs.flowchartLineMode;
+    if (this.dom.btnToggleFlowchartLines) {
+      this.dom.btnToggleFlowchartLines.textContent = "Lines: " + this.settings.flowchartLineMode.toUpperCase();
+    }
+
+    const volume = typeof prefs.volume === 'number' ? Math.max(0, Math.min(1, prefs.volume)) : 1;
+    this.lastNonZeroVolume = volume > 0 ? volume : 1;
+    if (this.dom.audio) { this.dom.audio.volume = volume; this.dom.audio.muted = (volume === 0); }
+    if (this.dom.volumeSlider) this.dom.volumeSlider.value = volume;
+    this.updateVolumeProgress(volume);
+    this.updateVolumeIcons(volume === 0);
+
+    if (this.dom.selectSpeed && typeof prefs.speed === 'number') {
+      const match = Array.from(this.dom.selectSpeed.options).find(o => parseFloat(o.value) === prefs.speed);
+      if (match) this.dom.selectSpeed.value = match.value;
+    }
+
+    if (this.dom.iconBellOn && this.dom.iconBellOff) {
+      this.dom.iconBellOn.classList.toggle('hidden', !this.settings.bellEnabled);
+      this.dom.iconBellOff.classList.toggle('hidden', this.settings.bellEnabled);
+    }
+
+    const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+    const theme = (prefs.theme === 'light' || prefs.theme === 'dark') ? prefs.theme : (prefersLight ? 'light' : 'dark');
+    this.applyTheme(theme, false);
+  }
+
+  savePrefs() {
+    try {
+      const prefs = {
+        bellEnabled: this.settings.bellEnabled,
+        flowchartLineMode: this.settings.flowchartLineMode,
+        volume: this.dom.audio ? this.dom.audio.volume : 1,
+        speed: this.dom.selectSpeed ? parseFloat(this.dom.selectSpeed.value) : 1,
+        theme: document.documentElement.getAttribute('data-theme') || 'dark'
+      };
+      localStorage.setItem('cyoa-prefs', JSON.stringify(prefs));
+    } catch (e) { /* localStorage unavailable -- preferences just won't persist */ }
+  }
+
+  applyTheme(theme, persist = true) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (this.dom.iconThemeLight && this.dom.iconThemeDark) {
+      this.dom.iconThemeLight.classList.toggle('hidden', theme !== 'dark');
+      this.dom.iconThemeDark.classList.toggle('hidden', theme !== 'light');
+    }
+    if (this.dom.btnToggleTheme) {
+      this.dom.btnToggleTheme.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+      this.dom.btnToggleTheme.title = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+    }
+    if (persist) this.savePrefs();
+  }
+
+  toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    this.applyTheme(current === 'dark' ? 'light' : 'dark');
   }
 
   async loadCyoaFile(file) {
@@ -1989,6 +2680,7 @@ class CYOAPlayerApp {
           const mainVol = this.dom.audio ? (this.dom.audio.muted ? 0 : this.dom.audio.volume) : 1;
           const relVol = typeof sec.volume === 'number' ? sec.volume : 1.0;
           audioEl.volume = Math.max(0, Math.min(1, mainVol * relVol));
+          audioEl.playbackRate = this.dom.selectSpeed ? (parseFloat(this.dom.selectSpeed.value) || 1) : 1;
 
           this.activeSecondaryAudioElements.push({
             audioEl,
@@ -2270,6 +2962,11 @@ class CYOAPlayerApp {
       if (this.dom.modalCreator) this.dom.modalCreator.classList.add('hidden');
       if (this.dom.modalUrl) this.dom.modalUrl.classList.add('hidden');
       if (this.dom.modalFlowchart) this.dom.modalFlowchart.classList.add('hidden');
+      if (this.dom.modalShortcuts) this.dom.modalShortcuts.classList.add('hidden');
+      return;
+    }
+    if (e.key === '?') {
+      if (this.dom.modalShortcuts) this.dom.modalShortcuts.classList.remove('hidden');
       return;
     }
 
