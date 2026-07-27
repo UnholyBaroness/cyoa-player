@@ -5,6 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>Choose Your Own Audio - Studio & Creator</title>
   <meta name="description" content="A client-side interactive Choose Your Own Audio story player and package builder." />
+  <meta name="color-scheme" content="light dark" />
+
+  <!-- Applies the saved (or OS-preferred) theme before first paint, so there's no
+       flash of the wrong theme on load. -->
+  <script>
+    (function () {
+      try {
+        var raw = localStorage.getItem('cyoa-prefs');
+        var theme = raw ? (JSON.parse(raw).theme) : null;
+        if (theme !== 'light' && theme !== 'dark') {
+          theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
   
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -75,6 +93,33 @@
             <path d="M6 9v3a2 2 0 0 0 2 2h4m4-5v3a2 2 0 0 1-2 2h-2"></path>
           </svg>
           Flowchart
+        </button>
+
+        <span class="header-divider" aria-hidden="true"></span>
+
+        <button id="btn-shortcuts" class="btn btn-icon-only" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </button>
+
+        <button id="btn-toggle-theme" class="btn btn-icon-only" aria-label="Switch to light mode" title="Switch to light mode">
+          <svg id="icon-theme-light" class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="4"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg id="icon-theme-dark" class="btn-icon hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
         </button>
       </div>
     </div>
@@ -317,7 +362,12 @@
     <div class="modal-card modal-large">
       <div class="modal-header">
         <h2 id="flowchart-modal-title">Story Flowchart & Branching Map</h2>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <div class="flowchart-header-controls">
+          <div class="zoom-control-group">
+            <button id="btn-flowchart-zoom-out" class="btn btn-secondary btn-sm" aria-label="Zoom out" title="Zoom out">&minus;</button>
+            <button id="btn-flowchart-zoom-reset" class="btn btn-secondary btn-sm" title="Reset zoom">100%</button>
+            <button id="btn-flowchart-zoom-in" class="btn btn-secondary btn-sm" aria-label="Zoom in" title="Zoom in">&plus;</button>
+          </div>
           <button id="btn-toggle-flowchart-lines" class="btn btn-secondary btn-sm" title="Toggle Connection Line Modes">Lines: HOVER</button>
           <button id="btn-close-flowchart" class="btn-close-modal" aria-label="Close flowchart modal">&times;</button>
         </div>
@@ -337,10 +387,34 @@
         <div class="form-group full-width">
           <label for="input-cyoa-url">Enter direct link to a .cyoa or .zip package:</label>
           <input type="url" id="input-cyoa-url" class="form-input" placeholder="https://example.com/mystory.cyoa" />
+          <p class="field-hint">Direct links, Dropbox, Google Drive, and GitHub share links all work. Mega links can't be fetched this way (they're encrypted) — download from Mega and use "Open .cyoa" instead.</p>
         </div>
       </div>
       <div class="modal-footer">
         <button id="btn-submit-url" class="btn btn-primary">Fetch & Load Story</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Modal -->
+  <div id="modal-shortcuts" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="shortcuts-modal-title">Keyboard Shortcuts</h2>
+        <button id="btn-close-shortcuts" class="btn-close-modal" aria-label="Close shortcuts modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <ul class="shortcuts-list">
+          <li><kbd>Space</kbd> / <kbd>K</kbd><span>Play / Pause</span></li>
+          <li><kbd>&larr;</kbd> / <kbd>J</kbd><span>Rewind 10s</span></li>
+          <li><kbd>&rarr;</kbd> / <kbd>L</kbd><span>Forward 10s</span></li>
+          <li><kbd>B</kbd><span>Previous scene</span></li>
+          <li><kbd>R</kbd><span>Restart scene</span></li>
+          <li><kbd>M</kbd><span>Mute / unmute</span></li>
+          <li><kbd>1</kbd>&ndash;<kbd>9</kbd><span>Pick a choice</span></li>
+          <li><kbd>Esc</kbd><span>Close any open dialog</span></li>
+          <li><kbd>?</kbd><span>Show this list</span></li>
+        </ul>
       </div>
     </div>
   </div>
