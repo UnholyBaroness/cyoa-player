@@ -228,31 +228,17 @@ class CYOACreator {
   }
 
   initDefaultTemplate() {
-    this.variables = [
-      { name: "happiness", type: "float", default: 5.0 },
-      { name: "hasKey", type: "boolean", default: false }
-    ];
+    this.variables = [];
 
     this.scenes = [
       {
         id: "scene001",
-        title: "The Beginning",
-        timer: 10,
-        timeoutNext: "scene002",
-        choiceOffset: 0.5,
-        audioFile: null,
-        secondarySounds: [],
-        choices: [
-          { text: "Go to Scene 2", next: "scene002", actions: [], conditions: [], gates: [] }
-        ]
-      },
-      {
-        id: "scene002",
-        title: "The Ending",
+        title: "",
         timer: 0,
         timeoutNext: "",
-        choiceOffset: 0,
+        choiceOffset: 1.0,
         audioFile: null,
+        existingAudio: null,
         secondarySounds: [],
         choices: []
       }
@@ -309,6 +295,11 @@ class CYOACreator {
           gates: c.gates || []
         }))
       };
+    });
+
+    this.scenes.forEach(sc => {
+      sc.choices.forEach(c => this.syncGatesForRuleSet(c));
+      (sc.secondarySounds || []).forEach(sec => this.syncGatesForRuleSet(sec));
     });
 
     this.renderUI();
@@ -465,6 +456,30 @@ class CYOACreator {
   // Removes any condition/action (on choices or secondary sounds) that references a
   // variable about to be deleted, then drops any gate left pointing at a now-missing
   // condition so a funnel doesn't silently break. Returns how many rules were removed.
+  // Keeps gates in lock-step with condition count: 2 conditions -> 1 gate, and one
+  // more gate per condition after that, auto-wired as a chain (gate 1 combines C1+C2,
+  // gate 2 combines gate 1's result with C3, and so on). The user only ever picks
+  // each gate's TYPE (AND/OR/...); wiring is never exposed as something to configure.
+  syncGatesForRuleSet(owner) {
+    const conds = owner.conditions || [];
+    const neededGateCount = Math.max(0, conds.length - 1);
+    const oldGates = owner.gates || [];
+    const newGates = [];
+    for (let k = 0; k < neededGateCount; k++) {
+      const gateType = oldGates[k] ? oldGates[k].gateType : 'AND';
+      const gate = { id: "G" + (k + 1), gateType };
+      if (k === 0) {
+        gate.inputA = conds[0] ? conds[0].id : '';
+        gate.inputB = conds[1] ? conds[1].id : '';
+      } else {
+        gate.inputA = newGates[k - 1].id;
+        gate.inputB = conds[k + 1] ? conds[k + 1].id : '';
+      }
+      newGates.push(gate);
+    }
+    owner.gates = newGates;
+  }
+
   clearReferencesToVariable(varName) {
     let count = 0;
     const cleanConditionsAndGates = (conditions, gates) => {
@@ -528,7 +543,7 @@ class CYOACreator {
   // scoped to scene.secondarySounds[secIndex] instead of scene.choices[cIndex], and
   // kept on its own sec-cond-* / sec-gate-* class names so its event bindings never
   // collide with the choice editor's.
-  buildRuleRow(kind, item, idx, pos, availableSignalPool) {
+  buildRuleRow(kind, item, idx, pos) {
     const row = document.createElement('div');
     row.className = 'sub-rule-row';
 
@@ -595,11 +610,8 @@ class CYOACreator {
       return row;
     }
 
-    // kind === 'gate'
+    // kind === 'gate' -- auto-generated chain, only the gate type is user-editable
     const gate = item;
-    const optA = availableSignalPool.map(sig => `<option value="${sig.id}" ${gate.inputA === sig.id ? 'selected' : ''}>Input A: ${sig.label}</option>`).join('');
-    const optB = availableSignalPool.map(sig => `<option value="${sig.id}" ${gate.inputB === sig.id ? 'selected' : ''}>Input B: ${sig.label}</option>`).join('');
-
     row.innerHTML = `
       <span class="rule-id-tag">${gate.id || ('G' + (idx + 1))}</span>
       <select class="form-input sec-gate-type-select" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-gindex="${idx}" style="width:85px; flex-shrink:0;">
@@ -610,13 +622,7 @@ class CYOACreator {
         <option value="XOR" ${gate.gateType === 'XOR' ? 'selected' : ''}>XOR</option>
         <option value="XNOR" ${gate.gateType === 'XNOR' ? 'selected' : ''}>XNOR</option>
       </select>
-      <select class="form-input sec-gate-in-a-select" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-gindex="${idx}" style="flex:1; min-width:110px;">
-        ${optA}
-      </select>
-      <select class="form-input sec-gate-in-b-select" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-gindex="${idx}" style="flex:1; min-width:110px;">
-        ${optB}
-      </select>
-      <button class="btn btn-danger btn-sm btn-delete-sec-gate" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-gindex="${idx}">&times;</button>
+      <span class="gate-inputs-readout">${gate.inputA || '—'} &amp; ${gate.inputB || '—'}</span>
     `;
     return row;
   }
@@ -634,7 +640,7 @@ class CYOACreator {
 
       card.innerHTML = `
         <div class="scene-edit-header">
-          <span class="scene-tag">Scene ${index + 1} (${scene.id})</span>
+          <span class="scene-tag">Scene ${index + 1}${scene.title ? ' (' + scene.title + ')' : ''}</span>
           <div class="scene-header-actions">
             <button class="btn btn-secondary btn-sm btn-move-scene-up" data-index="${index}" title="Move scene earlier" ${index === 0 ? 'disabled' : ''}>&uarr;</button>
             <button class="btn btn-secondary btn-sm btn-move-scene-down" data-index="${index}" title="Move scene later" ${index === this.scenes.length - 1 ? 'disabled' : ''}>&darr;</button>
@@ -737,8 +743,7 @@ class CYOACreator {
           ${secCondCount >= 2 ? `
             <div class="choice-sub-editor" style="border-color: var(--accent-gold);">
               <div class="sub-editor-header">
-                <span style="color: var(--accent-gold); font-weight:700;">2-Input Logic Gate Funnel:</span>
-                <button class="btn btn-secondary btn-sm btn-add-sec-gate" data-sindex="${index}" data-secindex="${secIdx}">+ Add 2-Input Gate</button>
+                <span style="color: var(--accent-gold); font-weight:700;">Combine Conditions:</span>
               </div>
               <div class="gates-list" id="sec-gate-list-${index}-${secIdx}"></div>
             </div>
@@ -746,17 +751,8 @@ class CYOACreator {
         `;
         secListContainer.appendChild(secCard);
 
-        const secAvailableSignalPool = [];
-        (secSound.conditions || []).forEach((cd, cIdx) => {
-          const cId = cd.id || ("C" + (cIdx + 1));
-          cd.id = cId;
-          secAvailableSignalPool.push({ id: cId, label: `Condition #${cIdx + 1} (${cId})` });
-        });
-        (secSound.gates || []).forEach((gt, gIdx) => {
-          const gId = gt.id || ("G" + (gIdx + 1));
-          gt.id = gId;
-          secAvailableSignalPool.push({ id: gId, label: `Gate #${gIdx + 1} (${gId})` });
-        });
+        (secSound.conditions || []).forEach((cd, cIdx) => { cd.id = cd.id || ("C" + (cIdx + 1)); });
+        (secSound.gates || []).forEach((gt, gIdx) => { gt.id = gt.id || ("G" + (gIdx + 1)); });
 
         const secCondContainer = secCard.querySelector(`#sec-cond-list-${index}-${secIdx}`);
         (secSound.conditions || []).forEach((cond, condIdx) => {
@@ -766,7 +762,7 @@ class CYOACreator {
         const secGateContainer = secCard.querySelector(`#sec-gate-list-${index}-${secIdx}`);
         if (secGateContainer) {
           (secSound.gates || []).forEach((gate, gIdx) => {
-            secGateContainer.appendChild(this.buildRuleRow('gate', gate, gIdx, { sindex: index, secindex: secIdx }, secAvailableSignalPool));
+            secGateContainer.appendChild(this.buildRuleRow('gate', gate, gIdx, { sindex: index, secindex: secIdx }));
           });
         }
       });
@@ -779,18 +775,8 @@ class CYOACreator {
 
         const condCount = choice.conditions ? choice.conditions.length : 0;
 
-        const availableSignalPool = [];
-        (choice.conditions || []).forEach((cd, cIdx) => {
-          const cId = cd.id || ("C" + (cIdx + 1));
-          cd.id = cId;
-          availableSignalPool.push({ id: cId, label: `Condition #${cIdx + 1} (${cId})` });
-        });
-
-        (choice.gates || []).forEach((gt, gIdx) => {
-          const gId = gt.id || ("G" + (gIdx + 1));
-          gt.id = gId;
-          availableSignalPool.push({ id: gId, label: `Gate #${gIdx + 1} (${gId})` });
-        });
+        (choice.conditions || []).forEach((cd, cIdx) => { cd.id = cd.id || ("C" + (cIdx + 1)); });
+        (choice.gates || []).forEach((gt, gIdx) => { gt.id = gt.id || ("G" + (gIdx + 1)); });
 
         choiceRow.innerHTML = `
           <div class="choice-edit-main-row">
@@ -815,8 +801,7 @@ class CYOACreator {
           ${condCount >= 2 ? `
             <div class="choice-sub-editor" style="border-color: var(--accent-gold);">
               <div class="sub-editor-header">
-                <span style="color: var(--accent-gold); font-weight:700;">2-Input Logic Gate Funnel:</span>
-                <button class="btn btn-secondary btn-sm btn-add-gate" data-sindex="${index}" data-cindex="${cIndex}">+ Add 2-Input Gate</button>
+                <span style="color: var(--accent-gold); font-weight:700;">Combine Conditions:</span>
               </div>
               <div class="gates-list" id="gate-list-${index}-${cIndex}"></div>
             </div>
@@ -900,15 +885,12 @@ class CYOACreator {
           condContainer.appendChild(condRow);
         });
 
-        // Render Binary Gates List
+        // Render Binary Gates List (auto-generated chain: N conditions -> N-1 gates)
         const gateContainer = choiceRow.querySelector(`#gate-list-${index}-${cIndex}`);
         if (gateContainer) {
           (choice.gates || []).forEach((gate, gIdx) => {
             const gRow = document.createElement('div');
             gRow.className = 'sub-rule-row';
-            
-            const optA = availableSignalPool.map(sig => `<option value="${sig.id}" ${gate.inputA === sig.id ? 'selected' : ''}>Input A: ${sig.label}</option>`).join('');
-            const optB = availableSignalPool.map(sig => `<option value="${sig.id}" ${gate.inputB === sig.id ? 'selected' : ''}>Input B: ${sig.label}</option>`).join('');
 
             gRow.innerHTML = `
               <span class="rule-id-tag">${gate.id || ('G' + (gIdx + 1))}</span>
@@ -920,13 +902,7 @@ class CYOACreator {
                 <option value="XOR" ${gate.gateType === 'XOR' ? 'selected' : ''}>XOR</option>
                 <option value="XNOR" ${gate.gateType === 'XNOR' ? 'selected' : ''}>XNOR</option>
               </select>
-              <select class="form-input gate-in-a-select" data-sindex="${index}" data-cindex="${cIndex}" data-gindex="${gIdx}" style="flex:1; min-width:110px;">
-                ${optA}
-              </select>
-              <select class="form-input gate-in-b-select" data-sindex="${index}" data-cindex="${cIndex}" data-gindex="${gIdx}" style="flex:1; min-width:110px;">
-                ${optB}
-              </select>
-              <button class="btn btn-danger btn-sm btn-delete-gate" data-sindex="${index}" data-cindex="${cIndex}" data-gindex="${gIdx}">&times;</button>
+              <span class="gate-inputs-readout">${gate.inputA || '—'} &amp; ${gate.inputB || '—'}</span>
             `;
             gateContainer.appendChild(gRow);
           });
@@ -1112,18 +1088,7 @@ class CYOACreator {
         const newId = "C" + (sec.conditions.length + 1);
         const firstVar = this.variables[0] ? this.variables[0].name : '';
         sec.conditions.push({ id: newId, unary: 'BUFFER', var: firstVar, op: '==', targetType: 'custom', value: '' });
-        this.renderUI();
-      };
-    });
-    document.querySelectorAll('.btn-add-sec-gate').forEach(el => {
-      el.onclick = (e) => {
-        const sec = this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex];
-        if (!sec.gates) sec.gates = [];
-        const newId = "G" + (sec.gates.length + 1);
-        const conds = sec.conditions || [];
-        const inA = conds[0] ? conds[0].id : "C1";
-        const inB = conds[1] ? conds[1].id : "C2";
-        sec.gates.push({ id: newId, gateType: 'AND', inputA: inA, inputB: inB });
+        this.syncGatesForRuleSet(sec);
         this.renderUI();
       };
     });
@@ -1161,24 +1126,14 @@ class CYOACreator {
     });
     document.querySelectorAll('.btn-delete-sec-cond').forEach(el => {
       el.onclick = (e) => {
-        this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].conditions.splice(e.target.dataset.condindex, 1);
+        const sec = this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex];
+        sec.conditions.splice(e.target.dataset.condindex, 1);
+        this.syncGatesForRuleSet(sec);
         this.renderUI();
       };
     });
     document.querySelectorAll('.sec-gate-type-select').forEach(el => {
       el.onchange = (e) => { this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].gates[e.target.dataset.gindex].gateType = e.target.value; };
-    });
-    document.querySelectorAll('.sec-gate-in-a-select').forEach(el => {
-      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].gates[e.target.dataset.gindex].inputA = e.target.value; };
-    });
-    document.querySelectorAll('.sec-gate-in-b-select').forEach(el => {
-      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].gates[e.target.dataset.gindex].inputB = e.target.value; };
-    });
-    document.querySelectorAll('.btn-delete-sec-gate').forEach(el => {
-      el.onclick = (e) => {
-        this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].gates.splice(e.target.dataset.gindex, 1);
-        this.renderUI();
-      };
     });
 
     document.querySelectorAll('.choice-text-input').forEach(el => {
@@ -1200,22 +1155,7 @@ class CYOACreator {
         const newId = "C" + (conds.length + 1);
         const firstVar = this.variables[0] ? this.variables[0].name : '';
         conds.push({ id: newId, unary: 'BUFFER', var: firstVar, op: '==', targetType: 'custom', value: '' });
-        this.renderUI();
-      };
-    });
-
-    document.querySelectorAll('.btn-add-gate').forEach(el => {
-      el.onclick = (e) => {
-        const s = e.target.dataset.sindex, c = e.target.dataset.cindex;
-        if (!this.scenes[s].choices[c].gates) this.scenes[s].choices[c].gates = [];
-        const gates = this.scenes[s].choices[c].gates;
-        const newId = "G" + (gates.length + 1);
-        
-        const conds = this.scenes[s].choices[c].conditions || [];
-        const inA = conds[0] ? conds[0].id : "C1";
-        const inB = conds[1] ? conds[1].id : "C2";
-
-        gates.push({ id: newId, gateType: 'AND', inputA: inA, inputB: inB });
+        this.syncGatesForRuleSet(this.scenes[s].choices[c]);
         this.renderUI();
       };
     });
@@ -1264,25 +1204,15 @@ class CYOACreator {
     });
     document.querySelectorAll('.btn-delete-cond').forEach(el => {
       el.onclick = (e) => {
-        this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].conditions.splice(e.target.dataset.condindex, 1);
+        const choice = this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex];
+        choice.conditions.splice(e.target.dataset.condindex, 1);
+        this.syncGatesForRuleSet(choice);
         this.renderUI();
       };
     });
 
     document.querySelectorAll('.gate-type-select').forEach(el => {
       el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].gates[e.target.dataset.gindex].gateType = e.target.value; };
-    });
-    document.querySelectorAll('.gate-in-a-select').forEach(el => {
-      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].gates[e.target.dataset.gindex].inputA = e.target.value; };
-    });
-    document.querySelectorAll('.gate-in-b-select').forEach(el => {
-      el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].gates[e.target.dataset.gindex].inputB = e.target.value; };
-    });
-    document.querySelectorAll('.btn-delete-gate').forEach(el => {
-      el.onclick = (e) => {
-        this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].gates.splice(e.target.dataset.gindex, 1);
-        this.renderUI();
-      };
     });
 
     document.querySelectorAll('.act-var-select').forEach(el => {
@@ -2002,12 +1932,26 @@ class CYOAPlayerApp {
   }
 
   setFlowchartZoom(z) {
-    this.flowchartZoom = Math.max(0.55, Math.min(1.3, Math.round(z * 100) / 100));
+    this.flowchartZoom = Math.max(0.5, Math.min(1.5, Math.round(z * 100) / 100));
     if (this.flowchartWrapperEl) {
       this.flowchartWrapperEl.style.setProperty('--fc-scale', this.flowchartZoom);
+      this.updateFlowchartViewportSize();
       requestAnimationFrame(() => requestAnimationFrame(() => this.drawFlowchartConnections(this.flowchartSvgEl, this.flowchartWrapperEl)));
     }
     if (this.dom.btnZoomReset) this.dom.btnZoomReset.textContent = Math.round(this.flowchartZoom * 100) + "%";
+  }
+
+  // The tree wrapper is visually scaled with a CSS transform (so text, spacing, and
+  // everything else scale together instead of just card width -- which used to leave
+  // fonts/padding full-size inside a narrowed box and forced word-by-word wrapping).
+  // A transform doesn't change how much space an element reserves in the page though,
+  // so its viewport parent is explicitly resized to the scaled footprint -- otherwise
+  // the scroll area stays full-size and zooming out just leaves dead space.
+  updateFlowchartViewportSize() {
+    if (!this.flowchartWrapperEl || !this.flowchartViewportEl) return;
+    const zoom = this.flowchartZoom || 1;
+    this.flowchartViewportEl.style.width = (this.flowchartWrapperEl.scrollWidth * zoom) + 'px';
+    this.flowchartViewportEl.style.height = (this.flowchartWrapperEl.scrollHeight * zoom) + 'px';
   }
 
   renderFlowchart() {
@@ -2148,8 +2092,8 @@ class CYOAPlayerApp {
                 <div class="choice-main-line">
                   <span class="choice-num">${idx + 1}</span>
                   <span class="choice-label">${c.text}</span>
-                  <span class="choice-arrow">&rarr; ${targetLabel}</span>
                 </div>
+                <div class="choice-target-line">&rarr; ${targetLabel}</div>
                 ${condText}
                 ${actText}
               </div>
@@ -2178,8 +2122,12 @@ class CYOAPlayerApp {
       treeWrapper.appendChild(column);
     });
 
-    container.appendChild(treeWrapper);
+    const zoomViewport = document.createElement('div');
+    zoomViewport.className = 'flowchart-zoom-viewport';
+    zoomViewport.appendChild(treeWrapper);
+    container.appendChild(zoomViewport);
     this.flowchartWrapperEl = treeWrapper;
+    this.flowchartViewportEl = zoomViewport;
     this.flowchartSvgEl = svgCanvas;
 
     container.querySelectorAll('.btn-jump-scene').forEach(btn => {
@@ -2192,11 +2140,17 @@ class CYOAPlayerApp {
 
     // Two rAFs (rather than a guessed setTimeout delay) reliably wait for layout to
     // settle before measuring card positions, regardless of device/render speed.
-    requestAnimationFrame(() => requestAnimationFrame(() => this.drawFlowchartConnections(svgCanvas, treeWrapper)));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      this.updateFlowchartViewportSize();
+      this.drawFlowchartConnections(svgCanvas, treeWrapper);
+    }));
 
     if (typeof ResizeObserver !== 'undefined') {
       if (this.flowchartResizeObserver) this.flowchartResizeObserver.disconnect();
-      this.flowchartResizeObserver = new ResizeObserver(() => this.drawFlowchartConnections(svgCanvas, treeWrapper));
+      this.flowchartResizeObserver = new ResizeObserver(() => {
+        this.updateFlowchartViewportSize();
+        this.drawFlowchartConnections(svgCanvas, treeWrapper);
+      });
       this.flowchartResizeObserver.observe(treeWrapper);
     }
   }
@@ -2204,7 +2158,14 @@ class CYOAPlayerApp {
   // GUTTER-BASED ROUTING ENGINE & CARD DEFAULT TIMEOUT HOVER HIGHLIGHTING
   drawFlowchartConnections(svg, wrapper) {
     if (!svg || !wrapper) return;
+    const zoom = this.flowchartZoom || 1;
     const wrapperRect = wrapper.getBoundingClientRect();
+    // getBoundingClientRect() reflects the CSS transform (visually scaled) position,
+    // while scrollWidth/scrollHeight (used to size the SVG below) are unaffected by
+    // transforms and stay in "natural" units. Dividing every rect-derived delta by
+    // the current zoom converts it back into those same natural units, so card
+    // positions and the SVG's own coordinate system always agree, at any zoom level.
+    const toLocal = (px) => px / zoom;
 
     svg.setAttribute('width', wrapper.scrollWidth);
     svg.setAttribute('height', wrapper.scrollHeight);
@@ -2241,16 +2202,16 @@ class CYOAPlayerApp {
           const cardARect = card.getBoundingClientRect();
           const cardBRect = targetCard.getBoundingClientRect();
 
-          const cA_left = cardARect.left - wrapperRect.left + wrapper.scrollLeft;
-          const cA_right = cardARect.right - wrapperRect.left + wrapper.scrollLeft;
-          const cB_left = cardBRect.left - wrapperRect.left + wrapper.scrollLeft;
-          const cB_right = cardBRect.right - wrapperRect.left + wrapper.scrollLeft;
+          const cA_left = toLocal(cardARect.left - wrapperRect.left);
+          const cA_right = toLocal(cardARect.right - wrapperRect.left);
+          const cB_left = toLocal(cardBRect.left - wrapperRect.left);
+          const cB_right = toLocal(cardBRect.right - wrapperRect.left);
 
-          const x1 = (itemRect.right - wrapperRect.left) + wrapper.scrollLeft;
-          const y1 = (itemRect.top + itemRect.height / 2 - wrapperRect.top) + wrapper.scrollTop;
+          const x1 = toLocal(itemRect.right - wrapperRect.left);
+          const y1 = toLocal(itemRect.top + itemRect.height / 2 - wrapperRect.top);
 
           let x2 = cB_left;
-          const y2 = (targetRect.top + 25 - wrapperRect.top) + wrapper.scrollTop;
+          const y2 = toLocal(targetRect.top - wrapperRect.top) + 25;
 
           const radius = 10;
           let d = '';
