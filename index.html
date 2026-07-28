@@ -24,10 +24,11 @@
     })();
   </script>
   
-  <!-- Google Fonts -->
+  <!-- Google Fonts: a single distinctive variable family used everywhere, at
+       different weights, instead of pairing a separate display + body font. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap" rel="stylesheet">
   
   <!-- JSZip Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -40,19 +41,18 @@
   <header class="app-header" role="banner">
     <div class="header-container">
       <div class="brand">
-        <svg class="brand-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-          <line x1="12" y1="19" x2="12" y2="22"></line>
+        <svg class="brand-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3.5c-3 0-5 2.5-5 6.2 0 5.1-2 6.8-2 6.8h14s-2-1.7-2-6.8c0-3.7-2-6.2-5-6.2z"></path>
+          <path d="M10.3 19.2a1.8 1.8 0 0 0 3.4 0"></path>
         </svg>
-        <span class="brand-title">Choose Your Own Audio <span class="highlight">Studio & Creator</span></span>
+        <span class="brand-title">Choose Your Own Audio<span class="brand-suffix">Studio</span></span>
       </div>
 
       <div class="header-actions">
         <input type="file" id="file-input" accept=".cyoa,.zip" class="sr-only" aria-label="Select CYOA file" />
         
         <button id="btn-open-file" class="btn btn-primary">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="17 8 12 3 7 8"></polyline>
             <line x1="12" y1="3" x2="12" y2="15"></line>
@@ -61,7 +61,7 @@
         </button>
 
         <button id="btn-open-url" class="btn btn-secondary" title="Load story from a URL link">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
           </svg>
@@ -69,7 +69,7 @@
         </button>
 
         <button id="btn-create-story" class="btn btn-accent" title="Build & export your own story package">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="12" y1="8" x2="12" y2="16"></line>
             <line x1="8" y1="12" x2="16" y2="12"></line>
@@ -78,7 +78,7 @@
         </button>
 
         <button id="btn-edit-current" class="btn btn-secondary hidden" title="Edit loaded package in builder">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
           </svg>
@@ -86,7 +86,7 @@
         </button>
 
         <button id="btn-view-flowchart" class="btn btn-secondary hidden" title="View story branching flowchart">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="6" height="6" rx="1"></rect>
             <rect x="15" y="3" width="6" height="6" rx="1"></rect>
             <rect x="9" y="15" width="6" height="6" rx="1"></rect>
@@ -98,7 +98,7 @@
         <span class="header-divider" aria-hidden="true"></span>
 
         <button id="btn-shortcuts" class="btn btn-icon-only" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"></circle>
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
             <line x1="12" y1="17" x2="12.01" y2="17"></line>
@@ -106,7 +106,7 @@
         </button>
 
         <button id="btn-toggle-theme" class="btn btn-icon-only" aria-label="Switch to light mode" title="Switch to light mode">
-          <svg id="icon-theme-light" class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg id="icon-theme-light" class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="4"></circle>
             <line x1="12" y1="1" x2="12" y2="3"></line>
             <line x1="12" y1="21" x2="12" y2="23"></line>
@@ -117,7 +117,7 @@
             <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
             <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
           </svg>
-          <svg id="icon-theme-dark" class="btn-icon hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg id="icon-theme-dark" class="btn-icon hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
           </svg>
         </button>
@@ -128,7 +128,7 @@
   <!-- Drag and Drop Overlay -->
   <div id="drag-drop-overlay" class="drag-drop-overlay hidden" aria-hidden="true">
     <div class="drag-drop-content">
-      <svg class="drag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg class="drag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
         <polyline points="17 8 12 3 7 8"></polyline>
         <line x1="12" y1="3" x2="12" y2="15"></line>
@@ -143,42 +143,52 @@
 
     <!-- Screen 1: Welcome Hero -->
     <section id="welcome-screen" class="welcome-screen" aria-labelledby="welcome-heading">
-      <div class="hero-card">
-        <div class="hero-icon-wrapper">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M12 3v18M3 12h18M5.5 5.5l13 13M18.5 5.5l-13 13"/>
+      <div class="hero-grid">
+        <div class="hero-content">
+          <p class="hero-eyebrow">A branching audio player &amp; builder, in your browser</p>
+          <h1 id="welcome-heading">Every choice leads<br>somewhere different.</h1>
+          <p class="hero-subtitle">Load a story and listen for the bell — that's your cue to pick a path. Or build your own branching audio piece, choices, conditions, and all, without leaving this page.</p>
+
+          <div class="hero-cta-row">
+            <button id="btn-hero-open" class="btn btn-primary btn-large">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              Select .cyoa File
+            </button>
+            <button id="btn-hero-create" class="btn btn-secondary btn-large">
+              Create Your Own Story
+            </button>
+          </div>
+          <button id="btn-hero-url" class="btn-text-link hero-url-link">or load one from a URL link</button>
+
+          <ul class="hero-feature-list">
+            <li>Runs entirely in your browser — nothing is uploaded anywhere</li>
+            <li>A chime signals every decision point, timed or open-ended</li>
+            <li>Conditions and variables can steer a story based on past choices</li>
+          </ul>
+        </div>
+
+        <div class="hero-visual" aria-hidden="true">
+          <svg class="hero-signature" viewBox="0 0 340 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <line x1="20" y1="150" x2="108" y2="150" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round"></line>
+            <circle cx="20" cy="150" r="7" fill="var(--text-secondary)"></circle>
+            <circle cx="112" cy="150" r="8" fill="var(--accent-gold)"></circle>
+            <line x1="118" y1="146" x2="228" y2="58" stroke="var(--accent-purple)" stroke-width="2" stroke-linecap="round"></line>
+            <line x1="230" y1="58" x2="320" y2="38" stroke="var(--accent-purple)" stroke-width="2" stroke-linecap="round" opacity="0.55"></line>
+            <line x1="120" y1="150" x2="228" y2="150" stroke="var(--accent-purple)" stroke-width="2" stroke-linecap="round" opacity="0.9"></line>
+            <line x1="230" y1="150" x2="320" y2="150" stroke="var(--accent-purple)" stroke-width="2" stroke-linecap="round" opacity="0.55"></line>
+            <line x1="118" y1="154" x2="228" y2="242" stroke="var(--accent-purple)" stroke-width="2" stroke-linecap="round" opacity="0.35"></line>
+            <line x1="230" y1="242" x2="320" y2="262" stroke="var(--accent-purple)" stroke-width="2" stroke-linecap="round" opacity="0.2"></line>
+            <circle cx="230" cy="58" r="5" fill="var(--accent-purple)"></circle>
+            <circle cx="230" cy="150" r="5" fill="var(--accent-purple)" opacity="0.9"></circle>
+            <circle cx="230" cy="242" r="5" fill="var(--accent-purple)" opacity="0.35"></circle>
+            <circle cx="320" cy="38" r="4" fill="var(--text-secondary)"></circle>
+            <circle cx="320" cy="150" r="4" fill="var(--text-secondary)"></circle>
+            <circle cx="320" cy="262" r="4" fill="var(--text-secondary)"></circle>
           </svg>
-        </div>
-        <h1 id="welcome-heading">Choose Your Own Audio</h1>
-        <p class="hero-subtitle">Play branching interactive audio stories or create your own .cyoa package directly in your browser. Private, offline-capable, and client-side.</p>
-        
-        <div class="hero-actions">
-          <button id="btn-hero-open" class="btn btn-primary btn-large">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            Select .cyoa File
-          </button>
-
-          <button id="btn-hero-url" class="btn btn-secondary btn-large">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-            </svg>
-            Load from URL Link
-          </button>
-
-          <button id="btn-hero-create" class="btn btn-accent btn-large">
-            Create Your Own Story
-          </button>
-        </div>
-
-        <div class="feature-badges">
-          <span class="badge"><span class="dot"></span> 100% Private Local Playback</span>
-          <span class="badge"><span class="dot"></span> Smart Decision Bell Signaling</span>
-          <span class="badge"><span class="dot"></span> Timed & Branching Choices</span>
         </div>
       </div>
     </section>
@@ -213,7 +223,7 @@
           
           <div id="choice-header" class="choice-header">
             <div class="bell-indicator">
-              <svg class="bell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg class="bell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                 <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
               </svg>
@@ -266,37 +276,37 @@
         <!-- Main Playback Row -->
         <div class="playback-controls-row">
           <button id="btn-prev-scene" class="btn-control-secondary" aria-label="Previous Scene" title="Previous Scene (B)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
           </button>
 
           <button id="btn-skip-back" class="btn-control-secondary" aria-label="Rewind 10 seconds" title="Rewind 10s (Left Arrow)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M11 19l-9-7 9-7v14zM22 19l-9-7 9-7v14z"></path>
             </svg>
             <span class="control-subtext">-10s</span>
           </button>
 
           <button id="btn-play-pause" class="btn-play-pause" aria-label="Play or Pause audio" title="Play/Pause (Space / K)">
-            <svg id="icon-play" class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+            <svg id="icon-play" class="play-icon" viewBox="0 0 24 24" fill="currentColor" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
             </svg>
-            <svg id="icon-pause" class="pause-icon hidden" viewBox="0 0 24 24" fill="currentColor">
+            <svg id="icon-pause" class="pause-icon hidden" viewBox="0 0 24 24" fill="currentColor" stroke-linecap="round" stroke-linejoin="round">
               <rect x="6" y="4" width="4" height="16"></rect>
               <rect x="14" y="4" width="4" height="16"></rect>
             </svg>
           </button>
 
           <button id="btn-skip-forward" class="btn-control-secondary" aria-label="Forward 10 seconds" title="Forward 10s (Right Arrow)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M13 19l9-7-9-7v14zM2 19l9-7-9-7v14z"></path>
             </svg>
             <span class="control-subtext">+10s</span>
           </button>
 
           <button id="btn-restart-scene" class="btn-control-secondary" aria-label="Restart Current Scene" title="Restart Scene (R)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M1 4v6h6"></path>
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
             </svg>
@@ -307,11 +317,11 @@
         <div class="utility-controls-row">
           <div class="utility-left">
             <button id="btn-toggle-bell" class="btn-control-secondary" aria-label="Toggle Choice Bell Chime Sound" title="Toggle Decision Bell Chime">
-              <svg id="icon-bell-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg id="icon-bell-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                 <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
               </svg>
-              <svg id="icon-bell-off" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg id="icon-bell-off" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                 <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                 <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" stroke-width="2"></line>
@@ -334,11 +344,11 @@
           <div class="utility-right">
             <div class="volume-container">
               <button id="btn-mute" class="btn-mute" aria-label="Mute / Unmute" title="Mute/Unmute (M)">
-                <svg id="icon-volume-high" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg id="icon-volume-high" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                   <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
                 </svg>
-                <svg id="icon-volume-muted" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg id="icon-volume-muted" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="1" y1="1" x2="23" y2="23"></line>
                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                 </svg>
@@ -434,15 +444,15 @@
           <div class="form-grid">
             <div class="form-group full-width">
               <label for="create-title">Story Title:</label>
-              <input type="text" id="create-title" class="form-input" placeholder="e.g. My Audio Adventure" value="My Audio Adventure" />
+              <input type="text" id="create-title" class="form-input" placeholder="e.g. My Audio Adventure" />
             </div>
             <div class="form-group">
               <label for="create-script-writer">Script Writer <span class="required-star">*</span>:</label>
-              <input type="text" id="create-script-writer" class="form-input" placeholder="e.g. Jane Doe" value="Anonymous Writer" required />
+              <input type="text" id="create-script-writer" class="form-input" placeholder="e.g. Jane Doe" required />
             </div>
             <div class="form-group">
               <label for="create-script-filler">Script Filler <span class="required-star">*</span>:</label>
-              <input type="text" id="create-script-filler" class="form-input" placeholder="e.g. John Smith" value="Anonymous Filler" required />
+              <input type="text" id="create-script-filler" class="form-input" placeholder="e.g. John Smith" required />
             </div>
             <div class="form-group full-width">
               <label for="create-description">Story Description:</label>
@@ -476,7 +486,7 @@
       </div>
       <div class="modal-footer">
         <button id="btn-export-cyoa" class="btn btn-primary btn-large">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7 10 12 15 17 10"></polyline>
             <line x1="12" y1="15" x2="12" y2="3"></line>
