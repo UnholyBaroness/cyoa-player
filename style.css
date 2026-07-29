@@ -5,8 +5,6 @@
    pairing a separate display font.
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Gabarito:wght@400..900&family=Marhey:wght@300..700&family=Rubik:ital,wght@0,300..900;1,300..900&family=Source+Sans+3:ital,wght@0,200..900;1,200..900&display=swap');
-
 :root,
 :root[data-theme="dark"] {
   --bg-dark: #150F1C;
@@ -74,15 +72,15 @@
      dark background reads as washed-out on a light one. Washes switch from
      translucent to near-solid pale tints for the same reason: a very
      low-opacity overlay on top of an already-light page barely registers. */
-  --accent-gold: #6339E0;
-  --accent-gold-hover: #4F2AC4;
-  --accent-gold-wash: #EEE7FC;
-  --accent-gold-border: rgba(99, 57, 224, 0.4);
+  --accent-gold: #1D4ED8;
+  --accent-gold-hover: #1739A6;
+  --accent-gold-wash: #E3EBFC;
+  --accent-gold-border: rgba(29, 78, 216, 0.4);
 
-  --accent-purple: #A6690F;
-  --accent-purple-hover: #8A560C;
-  --accent-purple-wash: #FBEEDA;
-  --accent-purple-border: rgba(166, 105, 15, 0.42);
+  --accent-purple: #8C1F1F;
+  --accent-purple-hover: #6E1717;
+  --accent-purple-wash: #FBE7E5;
+  --accent-purple-border: rgba(140, 31, 31, 0.4);
 
   --accent-cyan: #0C8A67;
   --accent-cyan-wash: #DFF3EC;
@@ -107,7 +105,7 @@
   /* A soft directional shadow reads as "elevated" on a light background; an
      omnidirectional glow (the dark-mode technique) just looks like a smudge
      when there's no darkness for it to contrast against. */
-  --shadow-glow: 0 6px 18px -6px rgba(99, 57, 224, 0.28);
+  --shadow-glow: 0 6px 18px -6px rgba(29, 78, 216, 0.28);
   --shadow-pop: 0 8px 18px -8px rgba(21, 15, 28, 0.22);
 
   --scrollbar-track: rgba(21, 15, 28, 0.05);
@@ -119,8 +117,8 @@
   --radius-lg: 20px;
   --radius-full: 9999px;
 
-  --font-main: "Rubik", sans-serif;
-   
+  --font-main: 'Rubik', system-ui, -apple-system, sans-serif;
+
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-theme: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
