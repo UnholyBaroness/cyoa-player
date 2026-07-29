@@ -527,7 +527,7 @@ kbd {
 
 .sub-rule-row { display: flex; gap: 0.35rem; margin-bottom: 0.45rem; align-items: center; width: 100%; flex-wrap: wrap; }
 .sub-rule-row .form-input { padding: 0.35rem 0.5rem; font-size: 0.825rem; min-width: 0; }
-.gate-inputs-readout { font-size: 0.82rem; color: var(--text-secondary); font-weight: 600; padding: 0 0.3rem; }
+.gate-combine-label { color: var(--text-muted); font-weight: 700; font-size: 0.8rem; flex-shrink: 0; }
 
 .rule-id-tag { background: var(--accent-amber-glow); color: var(--accent-gold); border: 1px solid var(--border-active); font-size: 0.7rem; font-weight: 800; padding: 0.2rem 0.4rem; border-radius: var(--radius-sm); flex-shrink: 0; }
 
