@@ -480,6 +480,28 @@ class CYOACreator {
     owner.gates = newGates;
   }
 
+  // Which signal ids are valid choices for gates[gateIdx]'s inputA/inputB dropdown:
+  // any condition, plus any strictly-EARLIER gate (never itself or a later gate --
+  // that would reference a value that doesn't exist yet when gates are evaluated in
+  // order). From that pool, anything already wired into a DIFFERENT input slot
+  // anywhere in this rule set is excluded, so the same signal can't silently feed
+  // two places at once -- the user has to un-wire it from its current slot first.
+  gateSlotOptions(conditions, gates, gateIdx, slot) {
+    const pool = [];
+    (conditions || []).forEach((c, i) => pool.push(c.id || ("C" + (i + 1))));
+    for (let i = 0; i < gateIdx; i++) pool.push(gates[i].id || ("G" + (i + 1)));
+
+    const claimed = new Set();
+    gates.forEach((g, i) => {
+      const isThisSlot = (i === gateIdx);
+      if (!(isThisSlot && slot === 'A') && g.inputA) claimed.add(g.inputA);
+      if (!(isThisSlot && slot === 'B') && g.inputB) claimed.add(g.inputB);
+    });
+
+    const currentValue = slot === 'A' ? gates[gateIdx].inputA : gates[gateIdx].inputB;
+    return pool.filter(id => id === currentValue || !claimed.has(id));
+  }
+
   clearReferencesToVariable(varName) {
     let count = 0;
     const cleanConditionsAndGates = (conditions, gates) => {
@@ -543,9 +565,14 @@ class CYOACreator {
   // scoped to scene.secondarySounds[secIndex] instead of scene.choices[cIndex], and
   // kept on its own sec-cond-* / sec-gate-* class names so its event bindings never
   // collide with the choice editor's.
-  buildRuleRow(kind, item, idx, pos) {
+  buildRuleRow(kind, item, idx, pos, allConditions, allGates) {
     const row = document.createElement('div');
     row.className = 'sub-rule-row';
+    const isSec = pos.secindex !== undefined;
+    const ownerAttrs = isSec
+      ? `data-sindex="${pos.sindex}" data-secindex="${pos.secindex}"`
+      : `data-sindex="${pos.sindex}" data-cindex="${pos.cindex}"`;
+    const prefix = isSec ? 'sec-' : '';
 
     if (kind === 'condition') {
       const cond = item;
@@ -610,11 +637,21 @@ class CYOACreator {
       return row;
     }
 
-    // kind === 'gate' -- auto-generated chain, only the gate type is user-editable
+    // kind === 'gate' -- gates are auto-created/removed to match condition count,
+    // but which signals feed each one is still user-chosen, just constrained so a
+    // signal can't be wired into two inputs at once.
     const gate = item;
+    const optionsA = this.gateSlotOptions(allConditions, allGates, idx, 'A');
+    const optionsB = this.gateSlotOptions(allConditions, allGates, idx, 'B');
+    const buildOptions = (options, current) => {
+      let html = `<option value="" ${!current ? 'selected' : ''}>--</option>`;
+      html += options.map(id => `<option value="${id}" ${id === current ? 'selected' : ''}>${id}</option>`).join('');
+      return html;
+    };
+
     row.innerHTML = `
       <span class="rule-id-tag">${gate.id || ('G' + (idx + 1))}</span>
-      <select class="form-input sec-gate-type-select" data-sindex="${pos.sindex}" data-secindex="${pos.secindex}" data-gindex="${idx}" style="width:85px; flex-shrink:0;">
+      <select class="form-input ${prefix}gate-type-select" ${ownerAttrs} data-gindex="${idx}" style="width:80px; flex-shrink:0;">
         <option value="AND" ${gate.gateType === 'AND' ? 'selected' : ''}>AND</option>
         <option value="OR" ${gate.gateType === 'OR' ? 'selected' : ''}>OR</option>
         <option value="NAND" ${gate.gateType === 'NAND' ? 'selected' : ''}>NAND</option>
@@ -622,7 +659,13 @@ class CYOACreator {
         <option value="XOR" ${gate.gateType === 'XOR' ? 'selected' : ''}>XOR</option>
         <option value="XNOR" ${gate.gateType === 'XNOR' ? 'selected' : ''}>XNOR</option>
       </select>
-      <span class="gate-inputs-readout">${gate.inputA || '—'} &amp; ${gate.inputB || '—'}</span>
+      <select class="form-input ${prefix}gate-in-a-select" ${ownerAttrs} data-gindex="${idx}" style="flex:1; min-width:70px;">
+        ${buildOptions(optionsA, gate.inputA)}
+      </select>
+      <span class="gate-combine-label">&amp;</span>
+      <select class="form-input ${prefix}gate-in-b-select" ${ownerAttrs} data-gindex="${idx}" style="flex:1; min-width:70px;">
+        ${buildOptions(optionsB, gate.inputB)}
+      </select>
     `;
     return row;
   }
@@ -762,7 +805,7 @@ class CYOACreator {
         const secGateContainer = secCard.querySelector(`#sec-gate-list-${index}-${secIdx}`);
         if (secGateContainer) {
           (secSound.gates || []).forEach((gate, gIdx) => {
-            secGateContainer.appendChild(this.buildRuleRow('gate', gate, gIdx, { sindex: index, secindex: secIdx }));
+            secGateContainer.appendChild(this.buildRuleRow('gate', gate, gIdx, { sindex: index, secindex: secIdx }, secSound.conditions, secSound.gates));
           });
         }
       });
@@ -885,26 +928,12 @@ class CYOACreator {
           condContainer.appendChild(condRow);
         });
 
-        // Render Binary Gates List (auto-generated chain: N conditions -> N-1 gates)
+        // Render Binary Gates List (auto-created chain: N conditions -> N-1 gates;
+        // inputs are user-choosable but exclusivity-constrained -- see buildRuleRow)
         const gateContainer = choiceRow.querySelector(`#gate-list-${index}-${cIndex}`);
         if (gateContainer) {
           (choice.gates || []).forEach((gate, gIdx) => {
-            const gRow = document.createElement('div');
-            gRow.className = 'sub-rule-row';
-
-            gRow.innerHTML = `
-              <span class="rule-id-tag">${gate.id || ('G' + (gIdx + 1))}</span>
-              <select class="form-input gate-type-select" data-sindex="${index}" data-cindex="${cIndex}" data-gindex="${gIdx}" style="width:85px; flex-shrink:0;">
-                <option value="AND" ${gate.gateType === 'AND' ? 'selected' : ''}>AND</option>
-                <option value="OR" ${gate.gateType === 'OR' ? 'selected' : ''}>OR</option>
-                <option value="NAND" ${gate.gateType === 'NAND' ? 'selected' : ''}>NAND</option>
-                <option value="NOR" ${gate.gateType === 'NOR' ? 'selected' : ''}>NOR</option>
-                <option value="XOR" ${gate.gateType === 'XOR' ? 'selected' : ''}>XOR</option>
-                <option value="XNOR" ${gate.gateType === 'XNOR' ? 'selected' : ''}>XNOR</option>
-              </select>
-              <span class="gate-inputs-readout">${gate.inputA || '—'} &amp; ${gate.inputB || '—'}</span>
-            `;
-            gateContainer.appendChild(gRow);
+            gateContainer.appendChild(this.buildRuleRow('gate', gate, gIdx, { sindex: index, cindex: cIndex }, choice.conditions, choice.gates));
           });
         }
 
@@ -1135,6 +1164,18 @@ class CYOACreator {
     document.querySelectorAll('.sec-gate-type-select').forEach(el => {
       el.onchange = (e) => { this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].gates[e.target.dataset.gindex].gateType = e.target.value; };
     });
+    document.querySelectorAll('.sec-gate-in-a-select').forEach(el => {
+      el.onchange = (e) => {
+        this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].gates[e.target.dataset.gindex].inputA = e.target.value;
+        this.renderUI();
+      };
+    });
+    document.querySelectorAll('.sec-gate-in-b-select').forEach(el => {
+      el.onchange = (e) => {
+        this.scenes[e.target.dataset.sindex].secondarySounds[e.target.dataset.secindex].gates[e.target.dataset.gindex].inputB = e.target.value;
+        this.renderUI();
+      };
+    });
 
     document.querySelectorAll('.choice-text-input').forEach(el => {
       el.onchange = (e) => {
@@ -1213,6 +1254,18 @@ class CYOACreator {
 
     document.querySelectorAll('.gate-type-select').forEach(el => {
       el.onchange = (e) => { this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].gates[e.target.dataset.gindex].gateType = e.target.value; };
+    });
+    document.querySelectorAll('.gate-in-a-select').forEach(el => {
+      el.onchange = (e) => {
+        this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].gates[e.target.dataset.gindex].inputA = e.target.value;
+        this.renderUI();
+      };
+    });
+    document.querySelectorAll('.gate-in-b-select').forEach(el => {
+      el.onchange = (e) => {
+        this.scenes[e.target.dataset.sindex].choices[e.target.dataset.cindex].gates[e.target.dataset.gindex].inputB = e.target.value;
+        this.renderUI();
+      };
     });
 
     document.querySelectorAll('.act-var-select').forEach(el => {
