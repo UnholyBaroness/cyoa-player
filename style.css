@@ -5,6 +5,8 @@
    pairing a separate display font.
    ========================================================================== */
 
+@import url('https://fonts.googleapis.com/css2?family=Gabarito:wght@400..900&family=Marhey:wght@300..700&family=Rubik:ital,wght@0,300..900;1,300..900&family=Source+Sans+3:ital,wght@0,200..900;1,200..900&display=swap');
+
 :root,
 :root[data-theme="dark"] {
   --bg-dark: #150F1C;
@@ -79,8 +81,8 @@
   --radius-lg: 20px;
   --radius-full: 9999px;
 
-  --font-main: 'Bricolage Grotesque', system-ui, -apple-system, sans-serif;
-
+  --font-main: "Rubik", sans-serif;
+   
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-theme: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
